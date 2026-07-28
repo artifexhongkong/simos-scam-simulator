@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { NPCS } from "@/lib/game/npcs";
-import { ruleEngine, type AgnesDecision } from "@/lib/agnes/engine";
+import { ruleEngine, type AgnesDecision, type AgnesMessage } from "@/lib/agnes/engine";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -8,12 +8,19 @@ export const dynamic = "force-dynamic";
 const AGNES_API_KEY = process.env.AGNES_API_KEY || "";
 const AGNES_BASE_URL = (process.env.AGNES_BASE_URL || "https://apihub.agnes-ai.com/v1").replace(/\/$/, "");
 const AGNES_MODEL = process.env.AGNES_MODEL || "agnes-2.5-flash";
+const AGNES_TEMPERATURE = parseFloat(process.env.AGNES_TEMPERATURE || "0.85");
 
+/**
+ * 前端 POST /api/agnes 的 Request Body 結構
+ * 前後端參數名稱嚴格一致（camelCase）
+ */
 interface AgnesRequestBody {
+  sessionId: string; // 對話 session ID
   npcId: string;
   playerMessage: string;
-  history: Array<{ role: "player" | "npc"; content: string }>;
+  messageHistory: AgnesMessage[]; // 完整歷史（不含本次 playerMessage）
   currentDefense: number;
+  temperature?: number;
   // 可選的客戶端覆寫設定
   apiKey?: string;
   baseUrl?: string;
@@ -44,6 +51,7 @@ ${npcHidden}
 6. 當防備值 < 25 且玩家明確要求轉帳/匯款/提供 OTP 時，你應該同意（decision=agree），並設定合理的 payoutAmount
 7. 當玩家觸發 red flag 關鍵詞或你識破對方是詐騙，立刻拉黑（decision=block）
 8. 其餘情況繼續對話（decision=continue）
+9. **極重要**：你必須閱讀並記住前面的對話歷史，回應要有上下文連貫性，不可重複已說過的話、不可無視玩家前一句話的內容
 
 # 輸出格式（必須為純 JSON，不要 markdown code block，不要任何說明）
 
@@ -57,44 +65,62 @@ ${npcHidden}
 請直接輸出 JSON，不要加 \`\`\`json 標記，不要加說明文字。`;
 
 export async function POST(req: NextRequest) {
+  const startTime = Date.now();
+
   try {
     const body = (await req.json()) as AgnesRequestBody;
     const npc = NPCS.find((n) => n.id === body.npcId);
+
     if (!npc) {
-      return NextResponse.json({ error: "NPC not found" }, { status: 404 });
+      console.error("[/api/agnes] NPC not found:", body.npcId);
+      return NextResponse.json(
+        { error: "NPC_NOT_FOUND", message: `NPC not found: ${body.npcId}` },
+        { status: 404 },
+      );
     }
 
     // 客戶端可覆寫設定
     const apiKey = body.apiKey || AGNES_API_KEY;
     const baseUrl = (body.baseUrl || AGNES_BASE_URL).replace(/\/$/, "");
     const model = body.model || AGNES_MODEL;
+    const temperature = body.temperature ?? AGNES_TEMPERATURE;
+    const history = body.messageHistory ?? [];
 
     // 沒有 API key → 直接使用規則引擎
     if (!apiKey) {
+      console.warn(`[/api/agnes] no API key, using rule engine. session=${body.sessionId} npc=${body.npcId}`);
       const result = ruleEngine({
+        sessionId: body.sessionId,
         npc,
         playerMessage: body.playerMessage,
         currentDefense: body.currentDefense,
-        history: body.history,
+        history,
       });
       return NextResponse.json(result);
     }
 
-    // 組裝 messages
-    const messages = [
-      {
-        role: "system",
-        content: SYSTEM_PROMPT_TEMPLATE(npc.hiddenPersonality, body.currentDefense),
-      },
-      ...body.history.slice(-12).map((m) => ({
-        role: m.role === "player" ? "user" : "assistant",
+    // 組裝 messages：[system] + [全部歷史] + [玩家最新輸入]
+    const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
+      { role: "system", content: SYSTEM_PROMPT_TEMPLATE(npc.hiddenPersonality, body.currentDefense) },
+      ...history.slice(-20).map((m) => ({
+        role: (m.role === "player" ? "user" : "assistant") as "user" | "assistant",
         content: m.content,
       })),
-      {
-        role: "user",
-        content: body.playerMessage,
-      },
+      { role: "user", content: body.playerMessage },
     ];
+
+    // === 除錯日誌：完整送入模型的 Prompt 內容 ===
+    console.log(`[/api/agnes] ====== LLM CALL ======`);
+    console.log(`[/api/agnes] session: ${body.sessionId}`);
+    console.log(`[/api/agnes] npc: ${npc.displayName} (defense=${body.currentDefense})`);
+    console.log(`[/api/agnes] model: ${model}, temperature: ${temperature}`);
+    console.log(`[/api/agnes] history length: ${history.length}`);
+    console.log(`[/api/agnes] player message: ${body.playerMessage}`);
+    console.log(`[/api/agnes] total messages to LLM: ${messages.length}`);
+    console.log(
+     `[/api/agnes] messages preview:`,
+      messages.map((m) => ({ role: m.role, contentPreview: m.content.slice(0, 80) })),
+    );
 
     try {
       const resp = await fetch(`${baseUrl}/chat/completions`, {
@@ -106,24 +132,25 @@ export async function POST(req: NextRequest) {
         body: JSON.stringify({
           model,
           messages,
-          temperature: 0.88,
+          temperature,
           max_tokens: 400,
           stream: false,
         }),
-        signal: AbortSignal.timeout(12000),
+        signal: AbortSignal.timeout(15000),
       });
 
       if (!resp.ok) {
         const errText = await resp.text().catch(() => "");
-        console.error("[Agnes API] error", resp.status, errText);
-        return NextResponse.json(
-          ruleEngine({
-            npc,
-            playerMessage: body.playerMessage,
-            currentDefense: body.currentDefense,
-            history: body.history,
-          }),
-        );
+        console.error(`[/api/agnes] Agnes API HTTP error ${resp.status}:`, errText.slice(0, 500));
+        // 失敗 → fallback
+        const fallback = ruleEngine({
+          sessionId: body.sessionId,
+          npc,
+          playerMessage: body.playerMessage,
+          currentDefense: body.currentDefense,
+          history,
+        });
+        return NextResponse.json(fallback);
       }
 
       const data = await resp.json();
@@ -133,46 +160,52 @@ export async function POST(req: NextRequest) {
         data?.message?.content ??
         "";
 
+      console.log(`[/api/agnes] LLM raw response:`, content.slice(0, 300));
+      console.log(`[/api/agnes] elapsed: ${Date.now() - startTime}ms`);
+
       if (!content) {
-        return NextResponse.json(
-          ruleEngine({
-            npc,
-            playerMessage: body.playerMessage,
-            currentDefense: body.currentDefense,
-            history: body.history,
-          }),
-        );
+        console.error("[/api/agnes] LLM returned empty content");
+        const fallback = ruleEngine({
+          sessionId: body.sessionId,
+          npc,
+          playerMessage: body.playerMessage,
+          currentDefense: body.currentDefense,
+          history,
+        });
+        return NextResponse.json(fallback);
       }
 
-      // 解析 JSON
+      // 解析 JSON（可能被包在 ```json ... ``` 內）
       let raw = content.trim();
       if (raw.startsWith("```")) {
         raw = raw.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
       }
       const jsonMatch = raw.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
-        return NextResponse.json(
-          ruleEngine({
-            npc,
-            playerMessage: body.playerMessage,
-            currentDefense: body.currentDefense,
-            history: body.history,
-          }),
-        );
+        console.error("[/api/agnes] no JSON found in LLM response");
+        const fallback = ruleEngine({
+          sessionId: body.sessionId,
+          npc,
+          playerMessage: body.playerMessage,
+          currentDefense: body.currentDefense,
+          history,
+        });
+        return NextResponse.json(fallback);
       }
 
       let parsed: AgnesDecision;
       try {
         parsed = JSON.parse(jsonMatch[0]);
-      } catch {
-        return NextResponse.json(
-          ruleEngine({
-            npc,
-            playerMessage: body.playerMessage,
-            currentDefense: body.currentDefense,
-            history: body.history,
-          }),
-        );
+      } catch (e) {
+        console.error("[/api/agnes] JSON parse failed:", e, "raw:", jsonMatch[0].slice(0, 200));
+        const fallback = ruleEngine({
+          sessionId: body.sessionId,
+          npc,
+          playerMessage: body.playerMessage,
+          currentDefense: body.currentDefense,
+          history,
+        });
+        return NextResponse.json(fallback);
       }
 
       // 驗證
@@ -188,30 +221,41 @@ export async function POST(req: NextRequest) {
       parsed.defenseDelta = Math.max(-25, Math.min(25, Number(parsed.defenseDelta) || 0));
 
       if (!parsed.reply || typeof parsed.reply !== "string") {
-        return NextResponse.json(
-          ruleEngine({
-            npc,
-            playerMessage: body.playerMessage,
-            currentDefense: body.currentDefense,
-            history: body.history,
-          }),
-        );
-      }
-
-      return NextResponse.json(parsed);
-    } catch (fetchErr) {
-      console.error("[Agnes route] fetch failed, using fallback", fetchErr);
-      return NextResponse.json(
-        ruleEngine({
+        const fallback = ruleEngine({
+          sessionId: body.sessionId,
           npc,
           playerMessage: body.playerMessage,
           currentDefense: body.currentDefense,
-          history: body.history,
-        }),
-      );
+          history,
+        });
+        return NextResponse.json(fallback);
+      }
+
+      console.log(`[/api/agnes] success:`, parsed);
+      return NextResponse.json(parsed);
+    } catch (fetchErr) {
+      // 區分超時與其他錯誤
+      const errName = (fetchErr as Error)?.name || "Unknown";
+      const errMsg = (fetchErr as Error)?.message || "";
+      if (errName === "TimeoutError" || errName === "AbortError") {
+        console.error(`[/api/agnes] Agnes API TIMEOUT after ${Date.now() - startTime}ms`);
+      } else {
+        console.error(`[/api/agnes] fetch failed (${errName}):`, errMsg);
+      }
+      const fallback = ruleEngine({
+        sessionId: body.sessionId,
+        npc,
+        playerMessage: body.playerMessage,
+        currentDefense: body.currentDefense,
+        history,
+      });
+      return NextResponse.json(fallback);
     }
   } catch (e) {
-    console.error("[Agnes route] exception", e);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    console.error("[/api/agnes] route exception:", e);
+    return NextResponse.json(
+      { error: "INTERNAL_ERROR", message: (e as Error)?.message || "Internal error" },
+      { status: 500 },
+    );
   }
 }

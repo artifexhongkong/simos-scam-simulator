@@ -13,6 +13,7 @@ import {
   Sparkles,
   Wifi,
   Shield,
+  Thermometer,
 } from "lucide-react";
 import { AppContainer } from "@/components/simos/Shell";
 import { useGameStore } from "@/lib/game/store";
@@ -33,6 +34,7 @@ export function SettingsApp({ onBack }: SettingsAppProps) {
   const [apiKey, setApiKey] = useState("");
   const [baseUrl, setBaseUrl] = useState("https://apihub.agnes-ai.com/v1");
   const [model, setModel] = useState("agnes-2.5-flash");
+  const [temperature, setTemperature] = useState(0.85);
   const [savedFlash, setSavedFlash] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
 
@@ -42,11 +44,15 @@ export function SettingsApp({ onBack }: SettingsAppProps) {
     const k = window.localStorage.getItem("simos_agnes_api_key");
     const u = window.localStorage.getItem("simos_agnes_base_url");
     const m = window.localStorage.getItem("simos_agnes_model");
-    // 用 microtask 避免在 effect 同步呼叫 setState
+    const t = window.localStorage.getItem("simos_agnes_temperature");
     Promise.resolve().then(() => {
       if (k) setApiKey(k);
       if (u) setBaseUrl(u);
       if (m) setModel(m);
+      if (t) {
+        const parsed = parseFloat(t);
+        if (!isNaN(parsed)) setTemperature(parsed);
+      }
     });
   }, []);
 
@@ -70,6 +76,7 @@ export function SettingsApp({ onBack }: SettingsAppProps) {
     }
     window.localStorage.setItem("simos_agnes_base_url", baseUrl.trim() || "https://apihub.agnes-ai.com/v1");
     window.localStorage.setItem("simos_agnes_model", model.trim() || "agnes-2.5-flash");
+    window.localStorage.setItem("simos_agnes_temperature", String(temperature));
     flashSaved();
   };
 
@@ -83,7 +90,6 @@ export function SettingsApp({ onBack }: SettingsAppProps) {
   return (
     <AppContainer title="設定" onBack={onBack} headerColor="bg-zinc-800">
       <div className="h-full overflow-y-auto">
-        {/* Saved flash */}
         {savedFlash && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
@@ -144,7 +150,7 @@ export function SettingsApp({ onBack }: SettingsAppProps) {
                 />
               </div>
               <div className="space-y-1.5">
-                <label className="text-white/50 text-[11px]">Model</label>
+                <label className="text-white/50 text-[11px]">Model 名稱</label>
                 <input
                   type="text"
                   value={model}
@@ -152,6 +158,35 @@ export function SettingsApp({ onBack }: SettingsAppProps) {
                   placeholder="agnes-2.5-flash"
                   className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-white/10 text-white text-sm placeholder:text-white/30 focus:outline-none focus:border-emerald-500 font-mono"
                 />
+              </div>
+
+              {/* Temperature 滑桿 */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-white/50 text-[11px] flex items-center gap-1">
+                    <Thermometer className="w-3 h-3" /> Temperature
+                  </label>
+                  <span className="text-emerald-300 text-xs font-mono font-semibold">
+                    {temperature.toFixed(2)}
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="2"
+                  step="0.05"
+                  value={temperature}
+                  onChange={(e) => setTemperature(parseFloat(e.target.value))}
+                  className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                />
+                <div className="flex justify-between text-[9px] text-white/30">
+                  <span>精確 (0.0)</span>
+                  <span>平衡 (0.85)</span>
+                  <span>創意 (2.0)</span>
+                </div>
+                <p className="text-white/40 text-[10px] leading-tight">
+                  較低 = NPC 回覆更穩定可預測；較高 = NPC 回覆更有變化與創意
+                </p>
               </div>
 
               <div className="rounded-lg bg-emerald-500/5 border border-emerald-500/15 p-2.5 flex items-start gap-2">
@@ -218,7 +253,7 @@ export function SettingsApp({ onBack }: SettingsAppProps) {
           <Section icon={<Info className="w-4 h-4" />} title="關於">
             <div className="space-y-2 text-xs text-white/70 leading-relaxed">
               <p>
-                <span className="text-white font-semibold">SimOS</span> — 詐騙模擬器 v1.0
+                <span className="text-white font-semibold">SimOS</span> — 詐騙模擬器 v1.2
               </p>
               <p className="text-white/50">
                 一款沉浸式行動模擬遊戲。玩家扮演詐騙犯，操作模擬手機作業系統，透過情報販子購買目標個資、在 TeleChat 加好友、利用純文字對話詐騙由 Agnes AI 驅動的 NPC。
@@ -268,3 +303,4 @@ function Stat({ label, value, color }: { label: string; value: string; color: st
     </div>
   );
 }
+

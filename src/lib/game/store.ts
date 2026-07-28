@@ -58,6 +58,7 @@ export interface GameState {
   appendMessage: (npcId: string, msg: ChatMessage) => void;
   updateDefense: (npcId: string, delta: number) => void;
   setConversationStatus: (npcId: string, status: ConversationState["status"], payout?: number) => void;
+  resetConversation: (npcId: string) => void;
   refreshRivals: () => void;
   resetGame: () => void;
 }
@@ -172,6 +173,32 @@ export const useGameStore = create<GameState>()(
               [npcId]: { ...conv, status, payout },
             },
             scamScore: newScore,
+          };
+        }),
+
+      resetConversation: (npcId) =>
+        set((s) => {
+          const npc = getNpcById(npcId);
+          if (!npc) return {};
+          const newConv: ConversationState = {
+            npcId,
+            messages: [
+              {
+                id: genId(),
+                role: "system",
+                content: `已與 ${npc.displayName} 重新建立對話。`,
+                ts: Date.now(),
+              },
+            ],
+            defense: npc.defenseBase,
+            status: "active",
+            startedAt: Date.now(),
+          };
+          return {
+            conversations: {
+              ...s.conversations,
+              [npcId]: newConv,
+            },
           };
         }),
 

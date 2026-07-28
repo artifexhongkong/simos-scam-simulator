@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Send,
@@ -39,20 +39,105 @@ export function ChatWindow({ npc }: { npc: NpcProfile }) {
   const [thinking, setThinking] = useState(false);
   const [successAnim, setSuccessAnim] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  // Bug 2.3: 追蹤軟鍵盤高度，動態調整輸入區位置（避免被鍵盤遮擋）
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  // Bug 2.2: 追蹤使用者是否手動向上滾動
+  const userScrolledUpRef = useRef(false);
+  // Bug 2.3: 防重複執行閾值
+  const lastScrollTsRef = useRef(0);
+
+  // 滾動到聊天底部（核心函數）
+  const scrollToBottom = useCallback((force = false) => {
+    const now = Date.now();
+    // 防重複執行：100ms 內不重複觸發
+    if (!force && now - lastScrollTsRef.current < 100) return;
+    lastScrollTsRef.current = now;
+
+    if (!scrollRef.current) return;
+
+    // Bug 2.2: 若使用者在最底部附近（150px 內），重置 userScrolledUpRef
+    const el = scrollRef.current;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    if (distanceFromBottom < 150) {
+      userScrolledUpRef.current = false;
+    }
+
+    // 若使用者主動向上滾動且非 force，不自動滾動
+    if (!force && userScrolledUpRef.current) return;
+
+    // 用 scrollTop = scrollHeight 直接滾動（避免 smooth 衝突延遲）
+    el.scrollTop = el.scrollHeight;
+  }, []);
+
+  // Bug 2.1: 監聽使用者滾動行為，標記是否手動向上滾動
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+
+    const handleScroll = () => {
+      const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+      // 若使用者距離底部超過 150px，視為主動向上閱讀歷史訊息
+      if (distanceFromBottom > 150) {
+        userScrolledUpRef.current = true;
+      } else {
+        userScrolledUpRef.current = false;
+      }
+    };
+
+    el.addEventListener("scroll", handleScroll, { passive: true });
+    return () => el.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  // Bug 2.1: 監聽視窗 resize（軟鍵盤彈出/收起會觸發）
+  // Bug 2.3: 用 Visual Viewport API 精準偵測鍵盤高度
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const handleResize = () => {
+      // 計算軟鍵盤高度（visualViewport.height 比 window.innerHeight 更精準）
+      if (window.visualViewport) {
+        const kbHeight = window.innerHeight - window.visualViewport.height;
+        setKeyboardHeight(kbHeight > 50 ? kbHeight : 0);
+      }
+
+      // 軟鍵盤彈起/收起，強制滾動到底部
+      setTimeout(() => scrollToBottom(false), 50);
+      setTimeout(() => scrollToBottom(false), 200);
+    };
+
+    window.addEventListener("resize", handleResize);
+    window.addEventListener("orientationchange", handleResize);
+
+    // Visual Viewport API（iOS Safari 必備，Android Chrome 也支援）
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener("resize", handleResize);
+      window.visualViewport.addEventListener("scroll", handleResize);
+    }
+
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      window.removeEventListener("orientationchange", handleResize);
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener("resize", handleResize);
+        window.visualViewport.removeEventListener("scroll", handleResize);
+      }
+    };
+  }, [scrollToBottom]);
 
   // 自動滾動到底部（依賴 messages 數量變化）
   useEffect(() => {
-    if (scrollRef.current) {
-      // 用 requestAnimationFrame 確保 DOM 已更新
-      requestAnimationFrame(() => {
-        if (scrollRef.current) {
-          scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-        }
-      });
-    }
-  }, [conv?.messages.length, thinking]);
+    // 新訊息 → 滾動到底
+    requestAnimationFrame(() => scrollToBottom(false));
+  }, [conv?.messages.length, thinking, scrollToBottom]);
+
+  // 輸入框 focus 時（軟鍵盤彈起）自動滾動到底
+  const handleInputFocus = () => {
+    // 强制滾動（使用者主動點輸入框，視為想看最新訊息）
+    setTimeout(() => scrollToBottom(true), 100);
+    setTimeout(() => scrollToBottom(true), 300);
+  };
 
   // 切換 NPC 時自動聚焦輸入框
   useEffect(() => {
@@ -286,7 +371,7 @@ export function ChatWindow({ npc }: { npc: NpcProfile }) {
       </div>
 
       {/* 訊息列表 */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-2 scroll-smooth">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
         {conv.messages.map((msg) => (
           <MessageBubble key={msg.id} msg={msg} npcAvatar={npc.avatar} />
         ))}
@@ -334,14 +419,19 @@ export function ChatWindow({ npc }: { npc: NpcProfile }) {
         </div>
       )}
 
-      {/* 輸入區 */}
+      {/* 輸入區 - Bug 2.3: 動態調整 padding-bottom 避免被軟鍵盤遮擋 */}
       {!isLocked && (
-        <div className="px-3 py-2.5 border-t border-white/5 bg-zinc-900/80 flex items-end gap-2">
+        <div
+          className="px-3 py-2.5 border-t border-white/5 bg-zinc-900/80 flex items-end gap-2"
+          style={{ paddingBottom: `calc(0.625rem + ${keyboardHeight}px)` }}
+        >
           <textarea
             ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
+            onFocus={handleInputFocus}
+            onClick={handleInputFocus}
             placeholder="輸入訊息..."
             rows={1}
             disabled={thinking}

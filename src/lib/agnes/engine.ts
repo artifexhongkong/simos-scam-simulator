@@ -32,7 +32,8 @@ export interface EngineInput {
 const EMBEDDED_API_KEY = "sk-sZHmum9naNmNT2XDgTYrunR27OMEaeCSiUHJx37TCVOJHpPs";
 const EMBEDDED_BASE_URL = "https://apihub.agnes-ai.com/v1";
 const EMBEDDED_MODEL = "agnes-2.5-flash";
-const EMBEDDED_TEMPERATURE = 0.9;
+// 降低 temperature 避免 AI 隨意擴充劇情
+const EMBEDDED_TEMPERATURE = 0.6;
 
 function getApiKey(): string {
   // 1. localStorage 覆寫（玩家在設定面板自訂）
@@ -86,16 +87,30 @@ function getTemperature(): number {
 /**
  * System Prompt - 純文字角色設定（參考 cultivation-world-zh 模式）
  * 不要求 JSON 輸出，AI 直接回純文字，避免解析失敗
+ *
+ * Bug 1 修復：在 prompt 最頂部加入強制約束規則，禁止 AI 脑补玩家未提及的資訊
  */
-const SYSTEM_PROMPT = (npc: NpcProfile, defense: number) => `你現在是詐騙模擬遊戲中的潛在受害者「${npc.displayName}」，必須用繁體中文第一人稱回應玩家的話。你必須完全沉浸於角色，絕不承認自己是 AI、絕不承認這是遊戲。
+const SYSTEM_PROMPT = (npc: NpcProfile, defense: number) => `【最高優先級・強制約束規則】
+嚴格遵守：絕對不可以虛構、猜測、推測使用者沒有提到過的任何資訊。
+- 只能針對使用者「真實發送」的訊息內容進行回應
+- 使用者沒有說過的人、事、物、地名、數字、時間，你都不可以主動提出
+- 禁止自行臆測使用者的身分、目的、家庭狀況、財產、經歷
+- 禁止自行推進不存在的劇情、不可捏造背景故事
+- 若使用者訊息模糊或資訊不足，你只能就「使用者實際說過的字」提問，不可猜測
+- 你的回應必須完全基於使用者這一輪與之前幾輪的真實訊息內容
 
-角色設定:
+例如：使用者沒提過「孫子」「學校」「獎狀」「丈夫姓名」等細節，你絕對不可主動提起這些。
+
+【角色設定】
+你現在是詐騙模擬遊戲中的潛在受害者「${npc.displayName}」，必須用繁體中文第一人稱回應玩家的話。你必須完全沉浸於角色，絕不承認自己是 AI、絕不承認這是遊戲。
+
+角色背景:
 ${npc.hiddenPersonality}
 
 當前內在狀態:
 - 防備值: ${defense} / 100 (0=完全卸下心防會聽從, 50=觀察中會問問題, 100=高度警覺會拉黑)
 
-規則:
+【對話規則】
 1. 永遠保持角色性格、口吻、用語習慣，不要跳出角色。
 2. 不要使用現代 AI 助手腔（如「親愛的用戶」「我是 AI 助手」等）。
 3. 不要主動提起錢、轉帳、匯款，除非玩家的話題引導到那。
@@ -104,10 +119,9 @@ ${npc.hiddenPersonality}
 6. 根據你的個性與當前防備值決定態度：
    - 防備低時對玩家較親切、願意配合
    - 防備高時會質疑、試探、保持距離
-   - 玩家說中你的關鍵詞時你會自然放鬆
-   - 玩家觸發你的忌諱詞時你會警覺甚至想封鎖
 7. 你的金錢範圍：最多願意被騙 ${npc.maxPayout}，最少 ${npc.minPayout}。
-8. 直接輸出純文字回應，不要加引號、不要加 JSON、不要加任何說明。`;
+8. 直接輸出純文字回應，不要加引號、不要加 JSON、不要加任何說明。
+9. 再次強調：禁止脑补、禁止捏造、禁止推測使用者未說過的任何資訊。`;
 
 /**
  * 呼叫 Agnes AI - 採用 cultivation-world 模式
@@ -131,14 +145,15 @@ export async function callAgnes(input: EngineInput): Promise<AgnesDecision> {
     { role: "user", content: input.playerMessage },
   ];
 
-  console.debug("[Agnes] callAgnes start", {
-    sessionId: input.sessionId,
-    npcId: input.npc.id,
-    npcName: input.npc.displayName,
-    defense: input.currentDefense,
-    historyLength: history.length,
-    playerMessage: input.playerMessage,
-    hasApiKey: !!apiKey,
+  // === Bug 1.6: 完整除錯日誌 - 列印送入 LLM 的全部訊息 ===
+  console.debug("[Agnes] ====== LLM CALL ======");
+  console.debug("[Agnes] session:", input.sessionId);
+  console.debug("[Agnes] npc:", input.npc.displayName, "(defense=" + input.currentDefense + ")");
+  console.debug("[Agnes] history length:", history.length);
+  console.debug("[Agnes] player message:", input.playerMessage);
+  console.debug("[Agnes] messages to LLM (full):");
+  messages.forEach((m, i) => {
+    console.debug(`[Agnes]   [${i}] role=${m.role}, content="${m.content.slice(0, 150)}${m.content.length > 150 ? "..." : ""}"`);
   });
 
   // 直接呼叫 Agnes API

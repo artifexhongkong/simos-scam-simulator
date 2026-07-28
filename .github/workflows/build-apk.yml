@@ -1,0 +1,130 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [main, master]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: |
+            platforms;android-34
+            build-tools;34.0.0
+            platforms;android-33
+
+      - name: Install JS dependencies
+        run: bun install --frozen-lockfile || bun install
+
+      - name: Build Next.js static export
+        env:
+          NEXT_PUBLIC_APP_MODE: capacitor
+        run: |
+          # Temporarily swap next.config to export mode
+          cp next.config.ts next.config.ts.bak
+          cat > next.config.ts <<'EOF'
+          import type { NextConfig } from "next";
+          const nextConfig: NextConfig = {
+            output: "export",
+            images: { unoptimized: true },
+            typescript: { ignoreBuildErrors: true },
+            reactStrictMode: false,
+            trailingSlash: true,
+          };
+          export default nextConfig;
+          EOF
+          bun run build || npx next build
+          rm -f next.config.ts
+          mv next.config.ts.bak next.config.ts
+
+      - name: Verify export output
+        run: ls -la out/
+
+      - name: Install Capacitor CLI
+        run: bun add -D @capacitor/cli @capacitor/core @capacitor/android @capacitor/status-bar @capacitor/splash-screen
+
+      - name: Add Android platform
+        run: |
+          npx cap add android || true
+          npx cap copy android
+
+      - name: Build Android Debug APK
+        working-directory: android
+        run: |
+          chmod +x ./gradlew
+          ./gradlew assembleDebug --no-daemon -Pandroid.enableProfileableBuilds=false
+
+      - name: Sign APK (if keystore present)
+        if: env.SIGNING_KEY_BASE64 != ''
+        env:
+          SIGNING_KEY_BASE64: ${{ secrets.SIGNING_KEY_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          echo "$SIGNING_KEY_BASE64" | base64 -d > /tmp/release.keystore
+          cp android/app/build/outputs/apk/debug/app-debug.apk /tmp/app-unsigned.apk
+          $ANDROID_HOME/build-tools/34.0.0/apksigner sign \
+            --ks /tmp/release.keystore \
+            --ks-pass pass:"$KEYSTORE_PASSWORD" \
+            --ks-key-alias "$KEY_ALIAS" \
+            --key-pass pass:"$KEY_PASSWORD" \
+            --out android/app/build/outputs/apk/debug/app-release.apk \
+            /tmp/app-unsigned.apk
+
+      - name: Rename APK
+        run: |
+          mkdir -p artifacts
+          if [ -f android/app/build/outputs/apk/debug/app-release.apk ]; then
+            cp android/app/build/outputs/apk/debug/app-release.apk artifacts/SimOS-release.apk
+          else
+            cp android/app/build/outputs/apk/debug/app-debug.apk artifacts/SimOS-debug.apk
+          fi
+          ls -la artifacts/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SimOS-APK
+          path: artifacts/*.apk
+          retention-days: 30
+
+      - name: Create Release
+        if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('v{0}', github.run_number) }}
+          name: SimOS ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('Build {0}', github.run_number) }}
+          files: artifacts/*.apk
+          generate_release_notes: true
+          prerelease: false
+          draft: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

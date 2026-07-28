@@ -1,2 +1,36 @@
-skills/
+# Node
 node_modules/
+.next/
+out/
+dist/
+build/
+
+# Capacitor / Android
+android/
+ios/
+.gradle/
+*.keystore
+*.jks
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+dev.log
+server.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Scripts temp
+*.tar
+.zscripts/

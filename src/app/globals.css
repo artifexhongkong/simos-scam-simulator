@@ -112,6 +112,61 @@
   --sidebar-ring: oklch(0.556 0 0);
 }
 
+/* ============================================
+ * iMessage UI CSS 變數（深色/淺色主題）
+ * 模擬 iOS 訊息 App 配色，方便未來擴充 WhatsApp/微信等介面
+ * ============================================ */
+:root {
+  /* iMessage 淺色主題（預設） */
+  --im-bg: #f5f5f7;              /* 聊天背景 */
+  --im-header-bg: rgba(249, 249, 249, 0.94);
+  --im-header-text: #000000;
+  --im-header-border: rgba(0, 0, 0, 0.1);
+  --im-input-bg: #f6f6f6;
+  --im-input-border: rgba(0, 0, 0, 0.1);
+  --im-input-text: #000000;
+  --im-input-placeholder: #8a8a8e;
+
+  --im-bubble-player-bg: #007aff;   /* 玩家氣泡：iOS 藍 */
+  --im-bubble-player-text: #ffffff;
+  --im-bubble-npc-bg: #e9e9eb;      /* NPC 氣泡：淺灰 */
+  --im-bubble-npc-text: #000000;
+  --im-bubble-system-bg: rgba(0, 0, 0, 0.06);
+  --im-bubble-system-text: #8a8a8e;
+
+  --im-timestamp-text: #8a8a8e;
+  --im-link-text: #007aff;
+
+  /* 狀態欄 */
+  --im-statusbar-bg: transparent;
+  --im-statusbar-text: #000000;
+}
+
+/* 深色主題：在 html 或 body 上加 class="dark-theme" */
+.dark-theme {
+  --im-bg: #000000;
+  --im-header-bg: rgba(28, 28, 30, 0.94);
+  --im-header-text: #ffffff;
+  --im-header-border: rgba(255, 255, 255, 0.1);
+  --im-input-bg: #1c1c1e;
+  --im-input-border: rgba(255, 255, 255, 0.1);
+  --im-input-text: #ffffff;
+  --im-input-placeholder: #8a8a8e;
+
+  --im-bubble-player-bg: #0b93f6;  /* iOS 深色藍 */
+  --im-bubble-player-text: #ffffff;
+  --im-bubble-npc-bg: #2c2c2e;     /* 深灰 */
+  --im-bubble-npc-text: #ffffff;
+  --im-bubble-system-bg: rgba(255, 255, 255, 0.08);
+  --im-bubble-system-text: #8a8a8e;
+
+  --im-timestamp-text: #8a8a8e;
+  --im-link-text: #0a84ff;
+
+  --im-statusbar-bg: transparent;
+  --im-statusbar-text: #ffffff;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

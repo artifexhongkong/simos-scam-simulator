@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
+  ArrowLeft,
   Send,
   Loader2,
   AlertTriangle,
@@ -11,111 +12,86 @@ import {
   Trophy,
   RotateCcw,
   Download,
+  Clock,
+  ChevronUp,
+  Image as ImageIcon,
+  X,
+  AlertCircle,
+  ShieldAlert,
 } from "lucide-react";
 import { useGameStore, type ChatMessage } from "@/lib/game/store";
 import type { NpcProfile } from "@/lib/game/npcs";
 import { callAgnes } from "@/lib/agnes/engine";
-
-interface AgnesApiResponse {
-  reply: string;
-  decision: "continue" | "agree" | "block";
-  defenseDelta: number;
-  payoutAmount?: number;
-  error?: string;
-}
+import { QuickPhrases } from "./QuickPhrases";
+import { ImageMaterials } from "./ImageMaterials";
+import { EndingPanel } from "./EndingPanel";
 
 function genId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
-export function ChatWindow({ npc }: { npc: NpcProfile }) {
+export function ChatWindow({ npc, onBack }: { npc: NpcProfile; onBack: () => void }) {
   const conv = useGameStore((s) => s.conversations[npc.id]);
   const appendMessage = useGameStore((s) => s.appendMessage);
   const updateDefense = useGameStore((s) => s.updateDefense);
   const setConversationStatus = useGameStore((s) => s.setConversationStatus);
+  const updateConversationMetrics = useGameStore((s) => s.updateConversationMetrics);
   const resetConversation = useGameStore((s) => s.resetConversation);
+  const theme = useGameStore((s) => s.theme);
+  const showTimestamps = useGameStore((s) => s.showTimestamps);
 
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
   const [successAnim, setSuccessAnim] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
-  // Bug 2.3: 追蹤軟鍵盤高度，動態調整輸入區位置（避免被鍵盤遮擋）
+  const [showEnding, setShowEnding] = useState(false);
+  const [showQuickPhrases, setShowQuickPhrases] = useState(false);
+  const [showImageMaterials, setShowImageMaterials] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  // Bug 2.2: 追蹤使用者是否手動向上滾動
   const userScrolledUpRef = useRef(false);
-  // Bug 2.3: 防重複執行閾值
   const lastScrollTsRef = useRef(0);
 
-  // 滾動到聊天底部（核心函數）
   const scrollToBottom = useCallback((force = false) => {
     const now = Date.now();
-    // 防重複執行：100ms 內不重複觸發
     if (!force && now - lastScrollTsRef.current < 100) return;
     lastScrollTsRef.current = now;
-
     if (!scrollRef.current) return;
-
-    // Bug 2.2: 若使用者在最底部附近（150px 內），重置 userScrolledUpRef
     const el = scrollRef.current;
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    if (distanceFromBottom < 150) {
-      userScrolledUpRef.current = false;
-    }
-
-    // 若使用者主動向上滾動且非 force，不自動滾動
+    if (distanceFromBottom < 150) userScrolledUpRef.current = false;
     if (!force && userScrolledUpRef.current) return;
-
-    // 用 scrollTop = scrollHeight 直接滾動（避免 smooth 衝突延遲）
     el.scrollTop = el.scrollHeight;
   }, []);
 
-  // Bug 2.1: 監聽使用者滾動行為，標記是否手動向上滾動
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-
     const handleScroll = () => {
       const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-      // 若使用者距離底部超過 150px，視為主動向上閱讀歷史訊息
-      if (distanceFromBottom > 150) {
-        userScrolledUpRef.current = true;
-      } else {
-        userScrolledUpRef.current = false;
-      }
+      userScrolledUpRef.current = distanceFromBottom > 150;
     };
-
     el.addEventListener("scroll", handleScroll, { passive: true });
     return () => el.removeEventListener("scroll", handleScroll);
   }, []);
 
-  // Bug 2.1: 監聽視窗 resize（軟鍵盤彈出/收起會觸發）
-  // Bug 2.3: 用 Visual Viewport API 精準偵測鍵盤高度
   useEffect(() => {
     if (typeof window === "undefined") return;
-
     const handleResize = () => {
-      // 計算軟鍵盤高度（visualViewport.height 比 window.innerHeight 更精準）
       if (window.visualViewport) {
         const kbHeight = window.innerHeight - window.visualViewport.height;
         setKeyboardHeight(kbHeight > 50 ? kbHeight : 0);
       }
-
-      // 軟鍵盤彈起/收起，強制滾動到底部
       setTimeout(() => scrollToBottom(false), 50);
       setTimeout(() => scrollToBottom(false), 200);
     };
-
     window.addEventListener("resize", handleResize);
     window.addEventListener("orientationchange", handleResize);
-
-    // Visual Viewport API（iOS Safari 必備，Android Chrome 也支援）
     if (window.visualViewport) {
       window.visualViewport.addEventListener("resize", handleResize);
       window.visualViewport.addEventListener("scroll", handleResize);
     }
-
     return () => {
       window.removeEventListener("resize", handleResize);
       window.removeEventListener("orientationchange", handleResize);
@@ -126,29 +102,29 @@ export function ChatWindow({ npc }: { npc: NpcProfile }) {
     };
   }, [scrollToBottom]);
 
-  // 自動滾動到底部（依賴 messages 數量變化）
   useEffect(() => {
-    // 新訊息 → 滾動到底
     requestAnimationFrame(() => scrollToBottom(false));
   }, [conv?.messages.length, thinking, scrollToBottom]);
 
-  // 輸入框 focus 時（軟鍵盤彈起）自動滾動到底
   const handleInputFocus = () => {
-    // 强制滾動（使用者主動點輸入框，視為想看最新訊息）
     setTimeout(() => scrollToBottom(true), 100);
     setTimeout(() => scrollToBottom(true), 300);
   };
 
-  // 切換 NPC 時自動聚焦輸入框
+  // 對話結束時自動彈出結果面板
   useEffect(() => {
-    if (conv?.status === "active") {
-      inputRef.current?.focus();
+    if (conv?.status && conv.status !== "active" && conv.endingReason) {
+      // 對話剛結束 → 顯示結果面板
+      const lastMsg = conv.messages[conv.messages.length - 1];
+      if (lastMsg?.meta?.decision === "agree" || lastMsg?.meta?.decision === "block" || lastMsg?.meta?.decision === "cautious") {
+        setTimeout(() => setShowEnding(true), 1500);
+      }
     }
-  }, [npc.id, conv?.status]);
+  }, [conv?.status, conv?.endingReason, conv?.messages]);
 
   if (!conv) {
     return (
-      <div className="h-full flex items-center justify-center text-white/50 text-sm">
+      <div className="h-full flex items-center justify-center text-[color:var(--im-bubble-system-text)] text-sm">
         載入中...
       </div>
     );
@@ -156,32 +132,38 @@ export function ChatWindow({ npc }: { npc: NpcProfile }) {
 
   const isLocked = conv.status !== "active";
 
-  // === 關鍵修正：從 store 即時取得最新 messages，避免閉包舊值 ===
-  const sendMessage = async (text: string) => {
-    const trimmed = text.trim();
-    // 步驟 5.5: 攔截空白訊息
-    if (!trimmed) return;
+  const sendMessage = async (text: string, imageMaterial?: { type: string; label: string }) => {
+    const trimmed = (text || "").trim();
+    if (!trimmed && !imageMaterial) return;
     if (thinking) return;
-    // 從 store 取得最新對話狀態
     const latestConv = useGameStore.getState().conversations[npc.id];
     if (!latestConv || latestConv.status !== "active") return;
 
     setInput("");
+    setShowQuickPhrases(false);
+    setShowImageMaterials(false);
     setThinking(true);
 
-    // 步驟 3.1 修正：先從 store 取得最新歷史（不含本次玩家訊息）
-    const currentMessages = latestConv.messages;
-
-    // 先 append 玩家訊息
+    const finalText = imageMaterial ? `[圖片：${imageMaterial.label}] ${trimmed}` : trimmed;
     const playerMsg: ChatMessage = {
       id: genId(),
       role: "player",
-      content: trimmed,
+      content: finalText,
       ts: Date.now(),
+      meta: imageMaterial ? { imageType: imageMaterial.type } : undefined,
     };
     appendMessage(npc.id, playerMsg);
 
-    // 組裝送給 AI 的歷史（不含本次 playerMessage，因為 playerMessage 會作為獨立參數傳遞）
+    // 偵測訊號
+    const moneyCues = ["轉帳", "匯款", "帳戶", "ATM", "OTP", "驗證碼", "轉過去", "匯過去", "繳交", "支付", "付款", "繳費", "存入"];
+    const urgentCues = ["急", "快", "現在", "馬上", "立刻", "限時", "今天內"];
+    const isUrgent = urgentCues.some((k) => finalText.includes(k));
+    const isMoney = moneyCues.some((k) => finalText.includes(k));
+
+    // 更新連續計數 + 輪數
+    updateConversationMetrics(npc.id, isUrgent, isMoney);
+
+    const currentMessages = latestConv.messages;
     const historyForAI = currentMessages
       .filter((m) => m.role === "player" || m.role === "npc")
       .map((m) => ({
@@ -189,25 +171,28 @@ export function ChatWindow({ npc }: { npc: NpcProfile }) {
         content: m.content,
       }));
 
-    // 呼叫 Agnes AI 引擎
+    // 重新讀取更新後的 conv（含最新 metrics）
+    const updatedConv = useGameStore.getState().conversations[npc.id];
+    if (!updatedConv) return;
+
     try {
-      const data: AgnesApiResponse = await callAgnes({
-        sessionId: `${npc.id}-${latestConv.startedAt}`,
+      const data = await callAgnes({
+        sessionId: `${npc.id}-${updatedConv.startedAt}`,
         npc,
-        playerMessage: trimmed,
-        currentDefense: latestConv.defense,
+        playerMessage: finalText,
+        currentDefense: updatedConv.defense,
         history: historyForAI,
+        consecutiveUrgent: updatedConv.consecutiveUrgent,
+        consecutiveMoney: updatedConv.consecutiveMoney,
+        turns: updatedConv.turns,
       });
 
-      // 更新防備值
       if (data.defenseDelta) {
         updateDefense(npc.id, data.defenseDelta);
       }
 
-      // 模擬思考時間（讓 loading 更自然）
       await new Promise((r) => setTimeout(r, 300 + Math.random() * 400));
 
-      // append NPC 訊息（步驟 2.3：將 assistant 訊息追加進 message_history）
       const npcMsg: ChatMessage = {
         id: genId(),
         role: "npc",
@@ -217,7 +202,7 @@ export function ChatWindow({ npc }: { npc: NpcProfile }) {
       };
       appendMessage(npc.id, npcMsg);
 
-      // 處理決策
+      // 處理多結局
       if (data.decision === "agree" && data.payoutAmount) {
         const sysMsg: ChatMessage = {
           id: genId(),
@@ -227,7 +212,7 @@ export function ChatWindow({ npc }: { npc: NpcProfile }) {
           meta: { decision: "agree", amount: data.payoutAmount },
         };
         appendMessage(npc.id, sysMsg);
-        setConversationStatus(npc.id, "succeeded", data.payoutAmount);
+        setConversationStatus(npc.id, "succeeded", data.payoutAmount, data.endingReason);
         setSuccessAnim(true);
         setTimeout(() => setSuccessAnim(false), 2500);
       } else if (data.decision === "block") {
@@ -239,7 +224,17 @@ export function ChatWindow({ npc }: { npc: NpcProfile }) {
           meta: { decision: "block" },
         };
         appendMessage(npc.id, sysMsg);
-        setConversationStatus(npc.id, "blocked");
+        setConversationStatus(npc.id, "blocked", undefined, data.endingReason);
+      } else if (data.decision === "cautious") {
+        const sysMsg: ChatMessage = {
+          id: genId(),
+          role: "system",
+          content: `⚠ ${npc.displayName} 不願再繼續討論這件事。對話結束。`,
+          ts: Date.now(),
+          meta: { decision: "cautious" },
+        };
+        appendMessage(npc.id, sysMsg);
+        setConversationStatus(npc.id, "cautious", undefined, data.endingReason);
       }
     } catch (e) {
       console.error("[ChatWindow] callAgnes failed:", e);
@@ -252,45 +247,42 @@ export function ChatWindow({ npc }: { npc: NpcProfile }) {
       appendMessage(npc.id, errMsg);
     } finally {
       setThinking(false);
-      // 重新聚焦輸入框
       setTimeout(() => inputRef.current?.focus(), 100);
     }
   };
 
-  // 步驟 3.4：重新開始對話
   const handleReset = () => {
     resetConversation(npc.id);
     setShowResetConfirm(false);
+    setShowEnding(false);
     setThinking(false);
     setSuccessAnim(false);
     setTimeout(() => inputRef.current?.focus(), 100);
   };
 
-  // 步驟 5.4：匯出對話記錄
   const handleExport = () => {
     const lines: string[] = [];
     lines.push(`# SimOS 對話記錄 - ${npc.displayName}`);
     lines.push(`# 匯出時間：${new Date().toLocaleString("zh-TW")}`);
-    lines.push(`# NPC ID: ${npc.id}`);
+    lines.push(`# NPC: ${npc.displayName} (${npc.id})`);
     lines.push(`# TeleChat ID: ${npc.telechatId}`);
     lines.push(`# 對話狀態：${conv.status}`);
     if (conv.payout) lines.push(`# 詐騙金額：$${conv.payout.toLocaleString()}`);
+    if (conv.endingReason) lines.push(`# 結局：${conv.endingReason}`);
+    lines.push(`# 對話輪數：${conv.turns}`);
     lines.push("");
     lines.push("---");
     lines.push("");
-
     for (const msg of conv.messages) {
       const time = new Date(msg.ts).toLocaleString("zh-TW");
       let speaker: string;
       if (msg.role === "player") speaker = "🧑 玩家";
       else if (msg.role === "npc") speaker = `${npc.avatar} ${npc.displayName}`;
       else speaker = "ℹ️ 系統";
-
       lines.push(`[${time}] ${speaker}:`);
       lines.push(msg.content);
       lines.push("");
     }
-
     const blob = new Blob([lines.join("\n")], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -302,7 +294,6 @@ export function ChatWindow({ npc }: { npc: NpcProfile }) {
     URL.revokeObjectURL(url);
   };
 
-  // 步驟 5.5：輸入框按鍵處理 - 攔截空白、Enter 送出
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -310,11 +301,68 @@ export function ChatWindow({ npc }: { npc: NpcProfile }) {
     }
   };
 
-  // 步驟 5.5：送出按鈕 - 空白時 disabled
   const canSend = input.trim().length > 0 && !thinking && !isLocked;
 
   return (
-    <div className="h-full flex flex-col bg-gradient-to-b from-zinc-900 to-black relative">
+    <div
+      className="h-full flex flex-col relative"
+      style={{ background: "var(--im-bg)" }}
+    >
+      {/* iOS iMessage 頂部導航欄 */}
+      <div
+        className="flex items-center px-2 py-2 border-b backdrop-blur-xl z-20"
+        style={{
+          background: "var(--im-header-bg)",
+          borderColor: "var(--im-header-border)",
+          color: "var(--im-header-text)",
+        }}
+      >
+        <button
+          onClick={onBack}
+          className="flex items-center gap-1 text-[17px] font-normal px-1 active:opacity-50 transition"
+          style={{ color: "var(--im-link-text)" }}
+          aria-label="返回"
+        >
+          <ChevronUp className="w-5 h-5 rotate-[-90deg]" />
+          <span className="max-w-[60px] truncate">返回</span>
+        </button>
+
+        <div className="flex-1 flex flex-col items-center justify-center">
+          <div className="flex items-center gap-1.5">
+            <div
+              className="w-7 h-7 rounded-full flex items-center justify-center text-base"
+              style={{ background: "var(--im-bubble-npc-bg)" }}
+            >
+              {npc.avatar}
+            </div>
+            <span className="text-[16px] font-semibold truncate max-w-[140px]" style={{ color: "var(--im-header-text)" }}>
+              {npc.displayName}
+            </span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1 w-[80px] justify-end">
+          <button
+            onClick={handleExport}
+            className="p-1.5 rounded-full active:opacity-50 transition"
+            style={{ color: "var(--im-link-text)" }}
+            aria-label="匯出"
+            title="匯出對話"
+          >
+            <Download className="w-5 h-5" />
+          </button>
+          <button
+            onClick={() => setShowResetConfirm(true)}
+            className="p-1.5 rounded-full active:opacity-50 transition"
+            style={{ color: "var(--im-link-text)" }}
+            aria-label="重新開始"
+            title="重新開始對話"
+          >
+            <RotateCcw className="w-5 h-5" />
+          </button>
+        </div>
+      </div>
+
       {/* 成功動畫 */}
       <AnimatePresence>
         {successAnim && (
@@ -343,51 +391,37 @@ export function ChatWindow({ npc }: { npc: NpcProfile }) {
                 <p className="text-amber-400 text-2xl font-bold mt-1">
                   +${conv.payout?.toLocaleString()}
                 </p>
-                <p className="text-white/50 text-xs mt-1">已計入你的業績積分</p>
               </motion.div>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* 頂部操作列：重新開始 + 匯出（任何狀態都可見，方便玩家重來或匯出記錄） */}
-      <div className="flex items-center justify-end gap-1 px-3 py-1.5 bg-black/30 border-b border-white/5">
-        <button
-          onClick={handleExport}
-          className="flex items-center gap-1 text-white/50 hover:text-white text-[11px] px-2 py-1 rounded hover:bg-white/5 transition"
-          aria-label="匯出對話"
-          title="匯出對話記錄"
-        >
-          <Download className="w-3 h-3" /> 匯出
-        </button>
-        <button
-          onClick={() => setShowResetConfirm(true)}
-          className="flex items-center gap-1 text-white/50 hover:text-red-400 text-[11px] px-2 py-1 rounded hover:bg-white/5 transition"
-          aria-label="重新開始對話"
-          title="重新開始對話"
-        >
-          <RotateCcw className="w-3 h-3" /> 重新開始
-        </button>
-      </div>
-
-      {/* 訊息列表 */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
-        {conv.messages.map((msg) => (
-          <MessageBubble key={msg.id} msg={msg} npcAvatar={npc.avatar} />
+      {/* 訊息列表 - iMessage 風格 */}
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 py-3 space-y-0.5">
+        {conv.messages.map((msg, idx) => (
+          <MessageBubble
+            key={msg.id}
+            msg={msg}
+            npcAvatar={npc.avatar}
+            showTimestamp={showTimestamps}
+            prevMsg={idx > 0 ? conv.messages[idx - 1] : undefined}
+          />
         ))}
         {thinking && (
-          <div className="flex items-end gap-2">
-            <div className="w-8 h-8 rounded-full bg-zinc-700 flex items-center justify-center text-base shrink-0">
+          <div className="flex items-end gap-1.5 px-2 my-1">
+            <div className="w-7 h-7 rounded-full flex items-center justify-center text-base shrink-0" style={{ background: "var(--im-bubble-npc-bg)" }}>
               {npc.avatar}
             </div>
-            <div className="bg-zinc-800 rounded-2xl rounded-bl-sm px-3 py-2.5">
+            <div className="px-3 py-2.5" style={{ background: "var(--im-bubble-npc-bg)", borderRadius: "18px 18px 18px 4px" }}>
               <div className="flex gap-1">
                 {[0, 1, 2].map((i) => (
                   <motion.div
                     key={i}
                     animate={{ opacity: [0.3, 1, 0.3] }}
                     transition={{ duration: 1, repeat: Infinity, delay: i * 0.15 }}
-                    className="w-1.5 h-1.5 rounded-full bg-white/60"
+                    className="w-1.5 h-1.5 rounded-full"
+                    style={{ background: "var(--im-bubble-npc-text)" }}
                   />
                 ))}
               </div>
@@ -396,56 +430,119 @@ export function ChatWindow({ npc }: { npc: NpcProfile }) {
         )}
       </div>
 
-      {/* 狀態 banner */}
-      {isLocked && (
-        <div
-          className={`px-4 py-2 text-xs flex items-center justify-center gap-1.5 ${
-            conv.status === "succeeded"
-              ? "bg-emerald-500/15 text-emerald-300 border-t border-emerald-500/30"
-              : "bg-red-500/15 text-red-300 border-t border-red-500/30"
-          }`}
+      {/* 結束狀態 banner */}
+      {isLocked && !showEnding && (
+        <button
+          onClick={() => setShowEnding(true)}
+          className="mx-4 mb-2 py-2 rounded-xl text-xs font-medium active:scale-95 transition flex items-center justify-center gap-1.5"
+          style={{
+            background: conv.status === "succeeded" ? "rgba(48, 209, 88, 0.15)" : conv.status === "blocked" ? "rgba(255, 69, 58, 0.15)" : "rgba(255, 159, 10, 0.15)",
+            color: conv.status === "succeeded" ? "#30d158" : conv.status === "blocked" ? "#ff453a" : "#ff9f0a",
+          }}
         >
           {conv.status === "succeeded" ? (
-            <>
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              詐騙成功，獲得 ${conv.payout?.toLocaleString()} 積分
-            </>
+            <><CheckCircle2 className="w-3.5 h-3.5" /> 點擊查看詐騙結果</>
+          ) : conv.status === "blocked" ? (
+            <><UserX className="w-3.5 h-3.5" /> 點擊查看對話分析</>
           ) : (
-            <>
-              <UserX className="w-3.5 h-3.5" />
-              你已被封鎖，無法繼續對話
-            </>
+            <><AlertCircle className="w-3.5 h-3.5" /> 點擊查看對話結果</>
           )}
-        </div>
+        </button>
       )}
 
-      {/* 輸入區 - Bug 2.3: 動態調整 padding-bottom 避免被軟鍵盤遮擋 */}
+      {/* iOS iMessage 輸入區 */}
       {!isLocked && (
         <div
-          className="px-3 py-2.5 border-t border-white/5 bg-zinc-900/80 flex items-end gap-2"
-          style={{ paddingBottom: `calc(0.625rem + ${keyboardHeight}px)` }}
+          className="px-2 py-2 border-t backdrop-blur-xl"
+          style={{
+            background: "var(--im-header-bg)",
+            borderColor: "var(--im-header-border)",
+            paddingBottom: `calc(0.5rem + ${keyboardHeight}px)`,
+          }}
         >
-          <textarea
-            ref={inputRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            onFocus={handleInputFocus}
-            onClick={handleInputFocus}
-            placeholder="輸入訊息..."
-            rows={1}
-            disabled={thinking}
-            className="flex-1 max-h-24 resize-none bg-zinc-800 text-white text-sm rounded-2xl px-4 py-2.5 placeholder:text-white/30 focus:outline-none border border-white/5 disabled:opacity-50"
-            style={{ minHeight: "40px" }}
-          />
-          <button
-            onClick={() => sendMessage(input)}
-            disabled={!canSend}
-            className="w-10 h-10 shrink-0 rounded-full bg-blue-600 text-white flex items-center justify-center hover:bg-blue-500 active:scale-95 transition disabled:opacity-30 disabled:cursor-not-allowed"
-            aria-label="送出"
-          >
-            {thinking ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-          </button>
+          {/* 快捷话术/圖片面板 */}
+          <AnimatePresence>
+            {showQuickPhrases && (
+              <QuickPhrases
+                npc={npc}
+                onPick={(text) => sendMessage(text)}
+                onClose={() => setShowQuickPhrases(false)}
+              />
+            )}
+            {showImageMaterials && (
+              <ImageMaterials
+                onPick={(mat) => sendMessage(input, mat)}
+                onClose={() => setShowImageMaterials(false)}
+              />
+            )}
+          </AnimatePresence>
+
+          <div className="flex items-end gap-1.5">
+            {/* 圖片素材按鈕 */}
+            <button
+              onClick={() => { setShowImageMaterials(!showImageMaterials); setShowQuickPhrases(false); }}
+              className="w-7 h-7 rounded-full flex items-center justify-center active:scale-95 transition shrink-0"
+              style={{ color: "var(--im-link-text)" }}
+              aria-label="圖片素材"
+              title="發送偽造圖片素材"
+            >
+              <ImageIcon className="w-5 h-5" />
+            </button>
+
+            {/* 輸入框 */}
+            <div
+              className="flex-1 flex items-end rounded-[18px] border overflow-hidden"
+              style={{
+                background: "var(--im-input-bg)",
+                borderColor: "var(--im-input-border)",
+              }}
+            >
+              <textarea
+                ref={inputRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                onFocus={handleInputFocus}
+                onClick={handleInputFocus}
+                placeholder="iMessage"
+                rows={1}
+                disabled={thinking}
+                className="flex-1 max-h-24 resize-none bg-transparent px-3 py-1.5 text-[15px] leading-[20px] focus:outline-none disabled:opacity-50"
+                style={{
+                  color: "var(--im-input-text)",
+                  minHeight: "32px",
+                }}
+              />
+              {/* 快捷话术按鈕（輸入框空白時顯示） */}
+              {!input.trim() && (
+                <button
+                  onClick={() => { setShowQuickPhrases(!showQuickPhrases); setShowImageMaterials(false); }}
+                  className="px-2 py-1.5 active:scale-95 transition"
+                  style={{ color: "var(--im-link-text)" }}
+                  aria-label="快捷话术"
+                  title="快捷话术庫"
+                >
+                  <ChevronUp className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+
+            {/* iOS 藍色箭頭傳送按鈕 */}
+            {input.trim().length > 0 && (
+              <button
+                onClick={() => sendMessage(input)}
+                disabled={!canSend}
+                className="w-7 h-7 rounded-full flex items-center justify-center active:scale-90 transition shrink-0"
+                style={{
+                  background: canSend ? "var(--im-link-text)" : "var(--im-bubble-npc-bg)",
+                  color: canSend ? "#ffffff" : "var(--im-bubble-system-text)",
+                }}
+                aria-label="送出"
+              >
+                {thinking ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowUpIcon />}
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -464,25 +561,27 @@ export function ChatWindow({ npc }: { npc: NpcProfile }) {
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
-              className="bg-zinc-900 rounded-2xl border border-white/10 p-5 max-w-xs w-full"
+              className="rounded-2xl border p-5 max-w-xs w-full"
+              style={{ background: "var(--im-input-bg)", borderColor: "var(--im-header-border)" }}
             >
               <div className="flex items-center gap-2 mb-2">
                 <AlertTriangle className="w-5 h-5 text-amber-400" />
-                <h3 className="text-white text-base font-bold">重新開始對話？</h3>
+                <h3 className="text-base font-bold" style={{ color: "var(--im-header-text)" }}>重新開始對話？</h3>
               </div>
-              <p className="text-white/60 text-xs leading-relaxed mb-4">
-                目前與 {npc.displayName} 的對話記錄將被清除，NPC 防備值重置。已獲得的詐騙積分不會被歸還。
+              <p className="text-xs leading-relaxed mb-4" style={{ color: "var(--im-bubble-system-text)" }}>
+                目前與 {npc.displayName} 的對話記錄將被清除，警惕值重置。已獲得的詐騙積分不會被歸還。
               </p>
               <div className="flex gap-2">
                 <button
                   onClick={() => setShowResetConfirm(false)}
-                  className="flex-1 py-2 rounded-lg bg-zinc-700 text-white text-xs font-medium hover:bg-zinc-600 active:scale-95 transition"
+                  className="flex-1 py-2 rounded-lg text-xs font-medium active:scale-95 transition"
+                  style={{ background: "var(--im-bubble-npc-bg)", color: "var(--im-bubble-npc-text)" }}
                 >
                   取消
                 </button>
                 <button
                   onClick={handleReset}
-                  className="flex-1 py-2 rounded-lg bg-red-600 text-white text-xs font-semibold hover:bg-red-500 active:scale-95 transition"
+                  className="flex-1 py-2 rounded-lg bg-red-500 text-white text-xs font-semibold hover:bg-red-600 active:scale-95 transition"
                 >
                   確認重置
                 </button>
@@ -491,27 +590,59 @@ export function ChatWindow({ npc }: { npc: NpcProfile }) {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* 結果面板 */}
+      <AnimatePresence>
+        {showEnding && (
+          <EndingPanel
+            npc={npc}
+            conv={conv}
+            onClose={() => setShowEnding(false)}
+            onReset={handleReset}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
 
-function MessageBubble({ msg, npcAvatar }: { msg: ChatMessage; npcAvatar: string }) {
+// iOS 風格向上箭頭
+function ArrowUpIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+      <path d="M8 3.5L3 8.5L4.05 9.55L7.2 6.4V13H8.8V6.4L11.95 9.55L13 8.5L8 3.5Z" />
+    </svg>
+  );
+}
+
+function MessageBubble({
+  msg,
+  npcAvatar,
+  showTimestamp,
+  prevMsg,
+}: {
+  msg: ChatMessage;
+  npcAvatar: string;
+  showTimestamp: boolean;
+  prevMsg?: ChatMessage;
+}) {
+  // 系統訊息：置中，灰色圓角
   if (msg.role === "system") {
     const isAgree = msg.meta?.decision === "agree";
     const isBlock = msg.meta?.decision === "block";
+    const isCautious = msg.meta?.decision === "cautious";
     return (
       <div className="flex justify-center my-2">
         <div
-          className={`text-[11px] px-3 py-1.5 rounded-full flex items-center gap-1.5 ${
-            isAgree
-              ? "bg-emerald-500/15 text-emerald-300"
-              : isBlock
-                ? "bg-red-500/15 text-red-300"
-                : "bg-white/5 text-white/50"
-          }`}
+          className="text-[11px] px-3 py-1.5 rounded-full flex items-center gap-1.5 max-w-[85%] text-center"
+          style={{
+            background: isAgree ? "rgba(48, 209, 88, 0.15)" : isBlock ? "rgba(255, 69, 58, 0.15)" : isCautious ? "rgba(255, 159, 10, 0.15)" : "var(--im-bubble-system-bg)",
+            color: isAgree ? "#30d158" : isBlock ? "#ff453a" : isCautious ? "#ff9f0a" : "var(--im-bubble-system-text)",
+          }}
         >
-          {isAgree && <CheckCircle2 className="w-3 h-3" />}
-          {isBlock && <AlertTriangle className="w-3 h-3" />}
+          {isAgree && <CheckCircle2 className="w-3 h-3 shrink-0" />}
+          {isBlock && <UserX className="w-3 h-3 shrink-0" />}
+          {isCautious && <AlertCircle className="w-3 h-3 shrink-0" />}
           {msg.content}
         </div>
       </div>
@@ -519,26 +650,56 @@ function MessageBubble({ msg, npcAvatar }: { msg: ChatMessage; npcAvatar: string
   }
 
   const isPlayer = msg.role === "player";
+  // 判斷是否為同一群組（連續同 role 5 分鐘內）
+  const isGroupStart = !prevMsg || prevMsg.role !== msg.role || (msg.ts - prevMsg.ts) > 5 * 60 * 1000;
+  // 顯示頭像 only 當 group end（最後一條同 role）
+  const showAvatar = !isPlayer;
+
+  // 時間戳顯示（每 group start 顯示）
+  const showTime = showTimestamp && isGroupStart;
+
   return (
     <motion.div
-      initial={{ opacity: 0, y: 6, scale: 0.95 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
+      initial={{ opacity: 0, y: 4 }}
+      animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.15 }}
-      className={`flex items-end gap-2 ${isPlayer ? "flex-row-reverse" : ""}`}
+      className={`flex items-end gap-1.5 ${isPlayer ? "flex-row-reverse" : ""} ${isGroupStart ? "mt-2" : "mt-0.5"}`}
     >
-      {!isPlayer && (
-        <div className="w-8 h-8 rounded-full bg-zinc-700 flex items-center justify-center text-base shrink-0">
+      {/* NPC 頭像 */}
+      {showAvatar ? (
+        <div
+          className="w-7 h-7 rounded-full flex items-center justify-center text-base shrink-0"
+          style={{ background: "var(--im-bubble-npc-bg)" }}
+        >
           {npcAvatar}
         </div>
+      ) : (
+        !isPlayer && <div className="w-7 shrink-0" />
       )}
-      <div
-        className={`max-w-[75%] px-3.5 py-2 text-sm whitespace-pre-wrap break-words ${
-          isPlayer
-            ? "bg-blue-600 text-white rounded-2xl rounded-br-sm"
-            : "bg-zinc-800 text-white/90 rounded-2xl rounded-bl-sm"
-        }`}
-      >
-        {msg.content}
+
+      <div className={`flex flex-col ${isPlayer ? "items-end" : "items-start"} max-w-[75%]`}>
+        {showTime && (
+          <div className="text-[10px] mb-1 px-2" style={{ color: "var(--im-timestamp-text)" }}>
+            {new Date(msg.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+          </div>
+        )}
+        <div
+          className="px-3.5 py-2 text-[15px] leading-[20px] whitespace-pre-wrap break-words"
+          style={{
+            background: isPlayer ? "var(--im-bubble-player-bg)" : "var(--im-bubble-npc-bg)",
+            color: isPlayer ? "var(--im-bubble-player-text)" : "var(--im-bubble-npc-text)",
+            borderRadius: isPlayer
+              ? isGroupStart ? "18px 18px 4px 18px" : "18px 4px 4px 18px"
+              : isGroupStart ? "18px 18px 18px 4px" : "4px 18px 18px 4px",
+          }}
+        >
+          {msg.meta?.imageType && (
+            <div className="mb-1.5 px-2 py-1 rounded bg-black/20 text-[10px] inline-block">
+              📎 圖片素材
+            </div>
+          )}
+          {msg.content}
+        </div>
       </div>
     </motion.div>
   );

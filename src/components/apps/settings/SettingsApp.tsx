@@ -14,6 +14,10 @@ import {
   Wifi,
   Shield,
   Thermometer,
+  Sun,
+  Moon,
+  Clock,
+  Palette,
 } from "lucide-react";
 import { AppContainer } from "@/components/simos/Shell";
 import { useGameStore } from "@/lib/game/store";
@@ -30,15 +34,20 @@ export function SettingsApp({ onBack }: SettingsAppProps) {
   const unlockedNpcIds = useGameStore((s) => s.unlockedNpcIds);
   const friendNpcIds = useGameStore((s) => s.friendNpcIds);
 
+  // UI 偏好
+  const theme = useGameStore((s) => s.theme);
+  const setTheme = useGameStore((s) => s.setTheme);
+  const showTimestamps = useGameStore((s) => s.showTimestamps);
+  const toggleTimestamps = useGameStore((s) => s.toggleTimestamps);
+
   const [aliasInput, setAliasInput] = useState(alias === "Anonymous" ? "" : alias);
   const [apiKey, setApiKey] = useState("");
   const [baseUrl, setBaseUrl] = useState("https://apihub.agnes-ai.com/v1");
   const [model, setModel] = useState("agnes-2.5-flash");
-  const [temperature, setTemperature] = useState(0.85);
+  const [temperature, setTemperature] = useState(0.6);
   const [savedFlash, setSavedFlash] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
 
-  // Load saved Agnes config from localStorage on mount
   useEffect(() => {
     if (typeof window === "undefined") return;
     const k = window.localStorage.getItem("simos_agnes_api_key");
@@ -102,6 +111,63 @@ export function SettingsApp({ onBack }: SettingsAppProps) {
         )}
 
         <div className="p-4 space-y-5">
+          {/* 介面外觀 */}
+          <Section icon={<Palette className="w-4 h-4" />} title="介面外觀">
+            <div className="space-y-3">
+              {/* 主題切換 */}
+              <div className="space-y-1.5">
+                <label className="text-white/50 text-[11px]">iMessage 主題模式</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => setTheme("dark")}
+                    className={`flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs font-medium transition ${
+                      theme === "dark"
+                        ? "bg-blue-600 text-white"
+                        : "bg-zinc-800 text-white/60"
+                    }`}
+                  >
+                    <Moon className="w-3.5 h-3.5" /> 深色
+                  </button>
+                  <button
+                    onClick={() => setTheme("light")}
+                    className={`flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs font-medium transition ${
+                      theme === "light"
+                        ? "bg-blue-600 text-white"
+                        : "bg-zinc-800 text-white/60"
+                    }`}
+                  >
+                    <Sun className="w-3.5 h-3.5" /> 淺色
+                  </button>
+                </div>
+              </div>
+
+              {/* 時間戳開關 */}
+              <div className="flex items-center justify-between p-2.5 rounded-lg bg-zinc-800">
+                <div className="flex items-center gap-2">
+                  <Clock className="w-3.5 h-3.5 text-amber-400" />
+                  <div>
+                    <p className="text-white text-xs font-medium">顯示訊息時間戳</p>
+                    <p className="text-white/40 text-[10px]">在訊息上方顯示時間</p>
+                  </div>
+                </div>
+                <button
+                  onClick={toggleTimestamps}
+                  className={`w-10 h-6 rounded-full transition relative ${
+                    showTimestamps ? "bg-emerald-500" : "bg-zinc-600"
+                  }`}
+                  aria-label="切換時間戳"
+                >
+                  <motion.div
+                    layout
+                    className="w-5 h-5 bg-white rounded-full absolute top-0.5"
+                    style={{ left: showTimestamps ? "18px" : "2px" }}
+                    transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                  />
+                </button>
+              </div>
+            </div>
+          </Section>
+
           {/* 玩家別名 */}
           <Section icon={<User className="w-4 h-4" />} title="玩家身份">
             <div className="space-y-2">
@@ -160,7 +226,6 @@ export function SettingsApp({ onBack }: SettingsAppProps) {
                 />
               </div>
 
-              {/* Temperature 滑桿 */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <label className="text-white/50 text-[11px] flex items-center gap-1">
@@ -181,18 +246,18 @@ export function SettingsApp({ onBack }: SettingsAppProps) {
                 />
                 <div className="flex justify-between text-[9px] text-white/30">
                   <span>精確 (0.0)</span>
-                  <span>平衡 (0.85)</span>
+                  <span>平衡 (0.6)</span>
                   <span>創意 (2.0)</span>
                 </div>
                 <p className="text-white/40 text-[10px] leading-tight">
-                  較低 = NPC 回覆更穩定可預測；較高 = NPC 回覆更有變化與創意
+                  預設 0.6：降低模型隨機發散，避免脑补玩家未提及的資訊
                 </p>
               </div>
 
               <div className="rounded-lg bg-emerald-500/5 border border-emerald-500/15 p-2.5 flex items-start gap-2">
                 <Wifi className="w-3 h-3 text-emerald-400 mt-0.5 shrink-0" />
                 <p className="text-emerald-300/70 text-[10px] leading-relaxed">
-                  填入 API key 後 NPC 將由 Agnes AI 即時驅動。未填寫則使用離線規則引擎（依然可玩，但對話較機械）。
+                  App 已內嵌測試 API key，未填寫也能玩。填入自己的 key 可獲得更穩定的 AI 回應。
                 </p>
               </div>
 
@@ -253,10 +318,11 @@ export function SettingsApp({ onBack }: SettingsAppProps) {
           <Section icon={<Info className="w-4 h-4" />} title="關於">
             <div className="space-y-2 text-xs text-white/70 leading-relaxed">
               <p>
-                <span className="text-white font-semibold">SimOS</span> — 詐騙模擬器 v1.2
+                <span className="text-white font-semibold">SimOS</span> — 詐騙模擬器 v2.0 iMessage
               </p>
               <p className="text-white/50">
-                一款沉浸式行動模擬遊戲。玩家扮演詐騙犯，操作模擬手機作業系統，透過情報販子購買目標個資、在 TeleChat 加好友、利用純文字對話詐騙由 Agnes AI 驅動的 NPC。
+                一款沉浸式行動模擬遊戲，高仿 iOS iMessage 介面。玩家扮演詐騙者，透過文字誘導普通市民上當。
+                含隱藏信任度系統、多結局判定、動態警惕機制、圖片素材回覆、快捷话术庫。
               </p>
               <div className="flex items-center gap-1.5 text-emerald-400 mt-2">
                 <Shield className="w-3 h-3" />
@@ -303,4 +369,3 @@ function Stat({ label, value, color }: { label: string; value: string; color: st
     </div>
   );
 }
-

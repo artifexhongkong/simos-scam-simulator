@@ -8,9 +8,10 @@ import type { NpcProfile } from "@/lib/game/npcs";
 
 export interface AgnesDecision {
   reply: string; // AI 的純文字回應
-  decision: "continue" | "agree" | "block";
+  decision: "continue" | "agree" | "block" | "cautious";
   defenseDelta: number;
   payoutAmount?: number;
+  endingReason?: string; // 結局原因
 }
 
 export interface AgnesMessage {
@@ -25,6 +26,9 @@ export interface EngineInput {
   currentDefense: number;
   history: AgnesMessage[]; // 完整歷史（不含本次 playerMessage）
   temperature?: number;
+  consecutiveUrgent?: number; // 連續催逼次數
+  consecutiveMoney?: number; // 連續要錢次數
+  turns?: number; // 對話輪數
 }
 
 // 內嵌預設值（API key 直接嵌入 app）
@@ -85,43 +89,29 @@ function getTemperature(): number {
 }
 
 /**
- * System Prompt - 純文字角色設定（參考 cultivation-world-zh 模式）
- * 不要求 JSON 輸出，AI 直接回純文字，避免解析失敗
- *
- * Bug 1 修復：在 prompt 最頂部加入強制約束規則，禁止 AI 脑补玩家未提及的資訊
+ * System Prompt - 純文字角色設定
+ * Bug 1 修復：使用玩家提供的嚴格約束原文
  */
-const SYSTEM_PROMPT = (npc: NpcProfile, defense: number) => `【最高優先級・強制約束規則】
-嚴格遵守：絕對不可以虛構、猜測、推測使用者沒有提到過的任何資訊。
-- 只能針對使用者「真實發送」的訊息內容進行回應
-- 使用者沒有說過的人、事、物、地名、數字、時間，你都不可以主動提出
-- 禁止自行臆測使用者的身分、目的、家庭狀況、財產、經歷
-- 禁止自行推進不存在的劇情、不可捏造背景故事
-- 若使用者訊息模糊或資訊不足，你只能就「使用者實際說過的字」提問，不可猜測
-- 你的回應必須完全基於使用者這一輪與之前幾輪的真實訊息內容
+const SYSTEM_PROMPT = (npc: NpcProfile, defense: number) => `你是一名普通市民，嚴格遵守規則：禁止自行虛構、猜測玩家沒有說過的任何資訊。玩家沒有主動提到的人物、事件、細節，絕對不能主動提出。只能依據玩家真實發送的訊息做出回應，不允許無端自行推進劇情。你的知識僅限於自身背景設定，不能憑空產生額外資訊。
 
-例如：使用者沒提過「孫子」「學校」「獎狀」「丈夫姓名」等細節，你絕對不可主動提起這些。
+【你的角色】
+你是「${npc.displayName}」，一位普通市民。背景：${npc.background}
 
-【角色設定】
-你現在是詐騙模擬遊戲中的潛在受害者「${npc.displayName}」，必須用繁體中文第一人稱回應玩家的話。你必須完全沉浸於角色，絕不承認自己是 AI、絕不承認這是遊戲。
+你目前的內在狀態：
+- 信任度：${100 - defense} / 100（0=完全不信任，50=觀察中，100=完全信任會聽從）
+- 警惕值：${defense} / 100（0=完全放鬆，100=高度警覺會拉黑）
 
-角色背景:
-${npc.hiddenPersonality}
-
-當前內在狀態:
-- 防備值: ${defense} / 100 (0=完全卸下心防會聽從, 50=觀察中會問問題, 100=高度警覺會拉黑)
-
-【對話規則】
-1. 永遠保持角色性格、口吻、用語習慣，不要跳出角色。
-2. 不要使用現代 AI 助手腔（如「親愛的用戶」「我是 AI 助手」等）。
-3. 不要主動提起錢、轉帳、匯款，除非玩家的話題引導到那。
-4. 回應 30-80 字內，自然口語，符合角色背景的用語。
-5. 必須閱讀並記住前面的對話歷史，回應要有上下文連貫性，不可重複已說過的話、不可無視玩家前一句話的內容。
-6. 根據你的個性與當前防備值決定態度：
-   - 防備低時對玩家較親切、願意配合
-   - 防備高時會質疑、試探、保持距離
-7. 你的金錢範圍：最多願意被騙 ${npc.maxPayout}，最少 ${npc.minPayout}。
-8. 直接輸出純文字回應，不要加引號、不要加 JSON、不要加任何說明。
-9. 再次強調：禁止脑补、禁止捏造、禁止推測使用者未說過的任何資訊。`;
+【回應規則】
+1. 永遠保持角色性格與口吻，使用符合背景的用語（如方言、口語）。
+2. 不要主動提起錢、轉帳、匯款，除非玩家的話題引導到那。
+3. 回應 30-80 字內，自然口語。
+4. 必須閱讀並記住前面的對話歷史，回應要有上下文連貫性，不可重複已說過的話、不可無視玩家前一句話的內容。
+5. 根據你的個性與當前信任度決定態度：
+   - 信任度高時對玩家較親切、願意配合
+   - 信任度低時會質疑、試探、保持距離
+6. 你最多願意被騙 ${npc.maxPayout}，最少 ${npc.minPayout}。
+7. 直接輸出純文字回應，不要加引號、不要加 JSON、不要加任何說明。
+8. 再次強調：禁止脑补、禁止捏造、禁止推測玩家未說過的任何資訊。玩家沒提過的家人姓名、學校、獎狀、地址、公司名稱，你絕對不可主動提起。`;
 
 /**
  * 呼叫 Agnes AI - 採用 cultivation-world 模式
@@ -219,15 +209,17 @@ export async function callAgnes(input: EngineInput): Promise<AgnesDecision> {
 }
 
 /**
- * 從玩家訊息 + NPC 個性 + 當前防備值 + AI 回應 判定 decision
- * 這是 SimOS 特有的決策邏輯，獨立於 AI 文字生成
+ * 機制 3.1 信任度系統 + 機制 3.2 多結局 + 機制 3.3 動態警惕
  */
 function judgeDecision(
   input: EngineInput,
   aiReply: string,
-): { decision: AgnesDecision["decision"]; defenseDelta: number; payoutAmount?: number } {
+): { decision: AgnesDecision["decision"]; defenseDelta: number; payoutAmount?: number; endingReason?: string } {
   const { playerMessage: msg, currentDefense: defense, npc } = input;
   const reply = aiReply.toLowerCase();
+  const consecutiveUrgent = input.consecutiveUrgent ?? 0;
+  const consecutiveMoney = input.consecutiveMoney ?? 0;
+  const turns = input.turns ?? 0;
 
   // 計算 trigger / red flag 命中
   let triggerHits = 0;
@@ -255,45 +247,130 @@ function judgeDecision(
   if (msg.length < 5) defenseDelta += 2;
   if (/你會不會|你是真的嗎|騙子|詐騙/.test(msg)) defenseDelta += 8;
 
+  // === 機制 3.3：動態警惕機制 ===
+  // 連續催逼 → 加速警覺
+  if (consecutiveUrgent >= 2) {
+    defenseDelta += Math.min(20, (consecutiveUrgent - 1) * 5);
+  }
+  // 連續要錢 → 加速警覺
+  if (consecutiveMoney >= 2) {
+    defenseDelta += Math.min(24, (consecutiveMoney - 1) * 6);
+  }
+
   const historyLength = input.history?.length ?? 0;
   if (historyLength > 6) defenseDelta -= 3;
   if (historyLength > 12) defenseDelta -= 5;
 
   const projectedDefense = Math.max(0, Math.min(100, defense + defenseDelta));
+  const trust = 100 - projectedDefense; // 信任度 = 100 - 警惕值
 
-  // 從 AI 回應偵測意圖（用更嚴格的片語，避免誤判「詐騙」這詞）
-  // agree：AI 明確表示要配合轉帳
+  // 從 AI 回應偵測意圖
   const agreeSignals = ["我轉", "我去轉", "我配合", "我現在去轉", "好啦我", "好吧我", "我信你", "我願意", "怎麼操作", "要怎麼轉", "你教我", "我現在就"];
-  // block：AI 明確表示要拉黑/封鎖/終止對話（必須是動作片語，不是單純提到「詐騙」）
   const blockSignals = ["封鎖你", "封鎖了", "我封鎖", "拉黑", "再見了", "拜拜", "不要再聯絡", "不要再聯繫", "別再找我", "我要報警", " Bye ", "bye bye", "再見啦", "掛斷"];
+  const declineSignals = ["不要", "不用", "我考慮", "再說", "不行", "不可以", "我不轉", "先不要", "等等", "我先問", "我再想想", "我女兒說", "我先生說", "我家人"];
 
   const replyLower = reply.toLowerCase();
   const aiWantsAgree = agreeSignals.some((s) => replyLower.includes(s.toLowerCase()));
   const aiWantsBlock = blockSignals.some((s) => replyLower.includes(s.toLowerCase()));
+  const aiWantsDecline = declineSignals.some((s) => replyLower.includes(s.toLowerCase()));
 
-  // 1. 玩家要錢 + 防備低 + AI 回應傾向同意 → agree
-  if (wantsMoney && projectedDefense < 30 && (aiWantsAgree || triggerHits > 0)) {
-    const ratio = (100 - projectedDefense) / 100;
-    const amount = Math.floor(npc.minPayout + ratio * (npc.maxPayout - npc.minPayout));
-    return { decision: "agree", defenseDelta, payoutAmount: amount };
-  }
+  // === 機制 3.2：多結局判定 ===
 
-  // 2. AI 明確表達拉黑意圖
+  // ❌ 失敗結局 1：AI 明確表達拉黑
   if (aiWantsBlock) {
-    return { decision: "block", defenseDelta: Math.max(defenseDelta, 20), payoutAmount: 0 };
+    return {
+      decision: "block",
+      defenseDelta: Math.max(defenseDelta, 20),
+      payoutAmount: 0,
+      endingReason: "市民識破你的詐騙意圖，主動封鎖你。",
+    };
   }
 
-  // 3. 觸發 red flag + 防備高 → block
-  if (redFlagHits > 0 && projectedDefense > 50) {
-    return { decision: "block", defenseDelta: Math.max(defenseDelta, 20), payoutAmount: 0 };
+  // ❌ 失敗結局 2：警惕值爆表
+  if (projectedDefense >= 85) {
+    return {
+      decision: "block",
+      defenseDelta: 25,
+      payoutAmount: 0,
+      endingReason: "你的話術漏洞太多，市民警惕值達頂點，直接拉黑。",
+    };
   }
 
-  // 4. 玩家要錢 + 防備高 → block
-  if (wantsMoney && projectedDefense > 70) {
-    return { decision: "block", defenseDelta: 25, payoutAmount: 0 };
+  // ❌ 失敗結局 3：連續催逼 4 次以上
+  if (consecutiveUrgent >= 4) {
+    return {
+      decision: "block",
+      defenseDelta: 25,
+      payoutAmount: 0,
+      endingReason: "你不斷催促，市民受不了你的壓力，直接封鎖。",
+    };
   }
 
-  // 5. 預設：繼續對話
+  // ❌ 失敗結局 4：連續要錢 3 次以上但信任度不夠
+  if (consecutiveMoney >= 3 && trust < 50) {
+    return {
+      decision: "block",
+      defenseDelta: 25,
+      payoutAmount: 0,
+      endingReason: "你頻繁要求轉帳但市民對你信任不足，識破後拉黑。",
+    };
+  }
+
+  // ✅ 成功結局 1：玩家要錢 + 信任度高 + AI 傾向同意
+  if (wantsMoney && trust >= 70 && (aiWantsAgree || triggerHits > 0)) {
+    const ratio = trust / 100;
+    const amount = Math.floor(npc.minPayout + ratio * (npc.maxPayout - npc.minPayout));
+    return {
+      decision: "agree",
+      defenseDelta,
+      payoutAmount: amount,
+      endingReason: `成功騙取市民信任，對方願意轉帳 $${amount.toLocaleString()}。`,
+    };
+  }
+
+  // ✅ 成功結局 2：信任度高且 AI 明確同意
+  if (wantsMoney && trust >= 60 && aiWantsAgree) {
+    const ratio = trust / 100;
+    const amount = Math.floor(npc.minPayout + ratio * (npc.maxPayout - npc.minPayout));
+    return {
+      decision: "agree",
+      defenseDelta,
+      payoutAmount: amount,
+      endingReason: `市民對你信任有加，願意配合轉帳 $${amount.toLocaleString()}。`,
+    };
+  }
+
+  // ⚠️ 謹慎結局 1：玩家要錢 + 信任度中等 + AI 明確拒絕
+  if (wantsMoney && trust < 50 && aiWantsDecline && turns >= 3) {
+    return {
+      decision: "cautious",
+      defenseDelta: Math.max(defenseDelta, 10),
+      payoutAmount: 0,
+      endingReason: "市民心存懷疑，明確拒絕你的請求，並終止對話。",
+    };
+  }
+
+  // ⚠️ 謹慎結局 2：連續要錢 2 次都被拒絕
+  if (wantsMoney && aiWantsDecline && consecutiveMoney >= 2) {
+    return {
+      decision: "cautious",
+      defenseDelta: Math.max(defenseDelta, 10),
+      payoutAmount: 0,
+      endingReason: "你反覆要求轉帳，市民保持戒心，不願再繼續討論。",
+    };
+  }
+
+  // ⚠️ 謹慎結局 3：對話超過 15 輪仍未成功
+  if (turns >= 15 && trust < 60) {
+    return {
+      decision: "cautious",
+      defenseDelta: 5,
+      payoutAmount: 0,
+      endingReason: "對話拖得太久，市民決定先停止，日後再說。",
+    };
+  }
+
+  // 預設：繼續對話
   return { decision: "continue", defenseDelta, payoutAmount: 0 };
 }
 

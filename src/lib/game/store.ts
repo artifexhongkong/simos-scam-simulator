@@ -19,10 +19,14 @@ export interface ChatMessage {
 export interface ConversationState {
   npcId: string;
   messages: ChatMessage[];
-  defense: number; // 當前 NPC 防備值（玩家不可見）
-  status: "active" | "succeeded" | "blocked" | "expired";
+  defense: number; // 當前 NPC 警惕值（玩家不可見，0-100）
+  status: "active" | "succeeded" | "blocked" | "cautious" | "expired"; // 多結局
   payout?: number; // 詐騙成功金額
   startedAt: number;
+  consecutiveUrgent: number; // 連續催逼計數（動態警惕機制）
+  consecutiveMoney: number; // 連續要錢計數
+  turns: number; // 對話輪數
+  endingReason?: string; // 結局原因（給結果面板顯示）
 }
 
 export interface GameState {
@@ -31,6 +35,10 @@ export interface GameState {
   playerId: string;
   playerAvatar: string; // 玩家 emoji 頭像
   playerTelechatId: string; // 玩家自己的 TeleChat ID
+
+  // UI 偏好設定
+  theme: "dark" | "light"; // iMessage 主題
+  showTimestamps: boolean; // 是否顯示訊息時間戳
 
   // 經濟系統：情報點數（用於購買情報，非遊戲主目標）
   intelPoints: number;
@@ -53,13 +61,16 @@ export interface GameState {
 
   // 操作
   setAlias: (alias: string) => void;
+  setTheme: (theme: "dark" | "light") => void;
+  toggleTimestamps: () => void;
   addIntelPoints: (n: number) => void;
   purchaseIntel: (npcId: string) => boolean;
   addFriend: (telechatId: string) => { ok: boolean; error?: string; npcId?: string };
   startConversation: (npcId: string) => void;
   appendMessage: (npcId: string, msg: ChatMessage) => void;
   updateDefense: (npcId: string, delta: number) => void;
-  setConversationStatus: (npcId: string, status: ConversationState["status"], payout?: number) => void;
+  setConversationStatus: (npcId: string, status: ConversationState["status"], payout?: number, reason?: string) => void;
+  updateConversationMetrics: (npcId: string, isUrgent: boolean, isMoney: boolean) => void;
   resetConversation: (npcId: string) => void;
   refreshRivals: () => void;
   resetGame: () => void;
@@ -111,6 +122,8 @@ export const useGameStore = create<GameState>()(
       playerId: genId(),
       playerAvatar: randomEmoji(),
       playerTelechatId: randomTelechatId(),
+      theme: "dark", // 預設深色（保留原本深色介面）
+      showTimestamps: false,
       intelPoints: INITIAL_INTEL_POINTS,
       scamScore: 0,
       unlockedNpcIds: [],
@@ -120,6 +133,9 @@ export const useGameStore = create<GameState>()(
       lastRivalUpdate: 0,
 
       setAlias: (alias) => set({ alias }),
+
+      setTheme: (theme) => set({ theme }),
+      toggleTimestamps: () => set((s) => ({ showTimestamps: !s.showTimestamps })),
 
       addIntelPoints: (n) => set((s) => ({ intelPoints: Math.max(0, s.intelPoints + n) })),
 
@@ -170,6 +186,9 @@ export const useGameStore = create<GameState>()(
           defense: npc.defenseBase,
           status: "active",
           startedAt: Date.now(),
+          consecutiveUrgent: 0,
+          consecutiveMoney: 0,
+          turns: 0,
         };
         set({ conversations: { ...s.conversations, [npcId]: newConv } });
       },
@@ -199,7 +218,7 @@ export const useGameStore = create<GameState>()(
           };
         }),
 
-      setConversationStatus: (npcId, status, payout) =>
+      setConversationStatus: (npcId, status, payout, reason) =>
         set((s) => {
           const conv = s.conversations[npcId];
           if (!conv) return {};
@@ -207,9 +226,26 @@ export const useGameStore = create<GameState>()(
           return {
             conversations: {
               ...s.conversations,
-              [npcId]: { ...conv, status, payout },
+              [npcId]: { ...conv, status, payout, endingReason: reason },
             },
             scamScore: newScore,
+          };
+        }),
+
+      updateConversationMetrics: (npcId, isUrgent, isMoney) =>
+        set((s) => {
+          const conv = s.conversations[npcId];
+          if (!conv) return {};
+          return {
+            conversations: {
+              ...s.conversations,
+              [npcId]: {
+                ...conv,
+                consecutiveUrgent: isUrgent ? conv.consecutiveUrgent + 1 : 0,
+                consecutiveMoney: isMoney ? conv.consecutiveMoney + 1 : 0,
+                turns: conv.turns + 1,
+              },
+            },
           };
         }),
 
@@ -230,6 +266,9 @@ export const useGameStore = create<GameState>()(
             defense: npc.defenseBase,
             status: "active",
             startedAt: Date.now(),
+            consecutiveUrgent: 0,
+            consecutiveMoney: 0,
+            turns: 0,
           };
           return {
             conversations: {

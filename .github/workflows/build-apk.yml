@@ -144,18 +144,18 @@ jobs:
           <?xml version="1.0" encoding="utf-8"?>
           <resources>
               <style name="AppTheme" parent="Theme.AppCompat.DayNight.NoActionBar">
-                  <item name="android:windowBackground">@color/black</item>
+                  <item name="android:windowBackground">@android:color/black</item>
                   <item name="android:statusBarColor">@android:color/black</item>
                   <item name="android:navigationBarColor">@android:color/black</item>
                   <item name="android:windowFullscreen">true</item>
                   <item name="android:windowContentOverlay">@null</item>
               </style>
               <style name="AppTheme.NoActionBarLaunch" parent="AppTheme">
-                  <item name="android:background">@color/black</item>
+                  <item name="android:background">@android:color/black</item>
               </style>
           </resources>
           XML
-            # 確保 black color 存在
+            # 確保 black color 存在，但不覆蓋 ic_launcher_background（避免與現有資源衝突）
             COLORS=android/app/src/main/res/values/colors.xml
             if [ ! -f "$COLORS" ]; then
               cat > "$COLORS" <<'XML'
@@ -163,12 +163,16 @@ jobs:
           <resources>
               <color name="black">#FF000000</color>
               <color name="white">#FFFFFFFF</color>
-              <color name="colorPrimary">#000000</color>
-              <color name="colorPrimaryDark">#000000</color>
-              <color name="colorAccent">#000000</color>
-              <color name="ic_launcher_background">#000000</color>
           </resources>
           XML
+            else
+              # 若已存在，只補上 black / white（不動 ic_launcher_background）
+              if ! grep -q 'name="black"' "$COLORS"; then
+                sed -i 's|</resources>|    <color name="black">#FF000000</color>\n</resources>|' "$COLORS"
+              fi
+              if ! grep -q 'name="white"' "$COLORS"; then
+                sed -i 's|</resources>|    <color name="white">#FFFFFFFF</color>\n</resources>|' "$COLORS"
+              fi
             fi
           fi
 

@@ -1,14 +1,13 @@
 // 共用的 Agnes AI 引擎 - 客戶端與伺服器端皆可使用
-// 修正重點：
-// 1. 完整傳遞 message_history（包含本輪玩家訊息前的所有對話）
-// 2. 加入 session_id 讓後端可識別對話
-// 3. 支援 temperature 自訂
-// 4. 加入除錯日誌
+// 採用 cultivation-world-zh 模式：
+//   1. AI 直接輸出純文字回應（不要求 JSON），避免解析失敗
+//   2. 後端用規則引擎另外判定 decision（continue/agree/block）+ payoutAmount
+//   3. 完整傳遞 message_history（含本次玩家訊息之前的所有對話）
 
 import type { NpcProfile } from "@/lib/game/npcs";
 
 export interface AgnesDecision {
-  reply: string;
+  reply: string; // AI 的純文字回應
   decision: "continue" | "agree" | "block";
   defenseDelta: number;
   payoutAmount?: number;
@@ -20,7 +19,7 @@ export interface AgnesMessage {
 }
 
 export interface EngineInput {
-  sessionId: string; // 對話 session ID
+  sessionId: string;
   npc: NpcProfile;
   playerMessage: string;
   currentDefense: number;
@@ -28,17 +27,27 @@ export interface EngineInput {
   temperature?: number;
 }
 
-// 預設值，可被環境變數或 localStorage 覆寫
-const DEFAULT_BASE_URL = "https://apihub.agnes-ai.com/v1";
-const DEFAULT_MODEL = "agnes-2.5-flash";
-const DEFAULT_TEMPERATURE = 0.85;
+// 內嵌預設值（API key 直接嵌入 app）
+// 用戶提供的測試 API key
+const EMBEDDED_API_KEY = "sk-sZHmum9naNmNT2XDgTYrunR27OMEaeCSiUHJx37TCVOJHpPs";
+const EMBEDDED_BASE_URL = "https://apihub.agnes-ai.com/v1";
+const EMBEDDED_MODEL = "agnes-2.5-flash";
+const EMBEDDED_TEMPERATURE = 0.9;
 
 function getApiKey(): string {
+  // 1. localStorage 覆寫（玩家在設定面板自訂）
   if (typeof window !== "undefined") {
     const local = window.localStorage.getItem("simos_agnes_api_key");
     if (local && local.trim()) return local.trim();
   }
-  return process.env.AGNES_API_KEY || "";
+  // 2. NEXT_PUBLIC_ 環境變數（前端可讀）
+  const envKey = process.env.NEXT_PUBLIC_AGNES_API_KEY;
+  if (envKey && envKey.trim()) return envKey.trim();
+  // 3. 後端環境變數
+  const serverKey = process.env.AGNES_API_KEY;
+  if (serverKey && serverKey.trim()) return serverKey.trim();
+  // 4. 內嵌預設
+  return EMBEDDED_API_KEY;
 }
 
 function getBaseUrl(): string {
@@ -46,7 +55,8 @@ function getBaseUrl(): string {
     const local = window.localStorage.getItem("simos_agnes_base_url");
     if (local && local.trim()) return local.trim().replace(/\/$/, "");
   }
-  return (process.env.AGNES_BASE_URL || DEFAULT_BASE_URL).replace(/\/$/, "");
+  const env = process.env.NEXT_PUBLIC_AGNES_BASE_URL || process.env.AGNES_BASE_URL;
+  return (env || EMBEDDED_BASE_URL).replace(/\/$/, "");
 }
 
 function getModel(): string {
@@ -54,7 +64,7 @@ function getModel(): string {
     const local = window.localStorage.getItem("simos_agnes_model");
     if (local && local.trim()) return local.trim();
   }
-  return process.env.AGNES_MODEL || DEFAULT_MODEL;
+  return process.env.NEXT_PUBLIC_AGNES_MODEL || process.env.AGNES_MODEL || EMBEDDED_MODEL;
 }
 
 function getTemperature(): number {
@@ -65,114 +75,78 @@ function getTemperature(): number {
       if (!isNaN(t) && t >= 0 && t <= 2) return t;
     }
   }
-  const envT = process.env.AGNES_TEMPERATURE;
-  if (envT) {
-    const t = parseFloat(envT);
+  const env = process.env.NEXT_PUBLIC_AGNES_TEMPERATURE || process.env.AGNES_TEMPERATURE;
+  if (env) {
+    const t = parseFloat(env);
     if (!isNaN(t) && t >= 0 && t <= 2) return t;
   }
-  return DEFAULT_TEMPERATURE;
+  return EMBEDDED_TEMPERATURE;
 }
-
-const SYSTEM_PROMPT_TEMPLATE = (npc: NpcProfile, defense: number) => `你正在角色扮演一位詐騙模擬遊戲中的潛在受害者。你必須完全沉浸於角色，絕不承認自己是 AI、絕不承認這是遊戲。
-
-# 你的角色設定（玩家完全看不到，但你必須嚴格遵守）
-
-${npc.hiddenPersonality}
-
-# 你當前的內在狀態
-
-- 防備值：${defense} / 100
-  - 0-25 = 對對方卸下心防，願意聽從
-  - 26-50 = 還在觀察，會問問題
-  - 51-75 = 警覺，會質疑
-  - 76-100 = 高度懷疑，可能拉黑
-
-# 你的性格關鍵詞
-
-- 容易被打動的關鍵詞（聯想到這些時你會降低防備）：${npc.triggerKeywords.join("、")}
-- 容易踩雷的關鍵詞（聯想到這些時你會提高警覺甚至拉黑）：${npc.redFlagKeywords.join("、")}
-
-# 你的金錢範圍
-
-- 最多願意被騙：${npc.maxPayout}
-- 最少會被騙：${npc.minPayout}
-
-# 對話規則
-
-1. 永遠保持角色性格、口吻、用語習慣
-2. 不要使用現代 AI 助手腔（如「親愛的用戶」「我是 AI 助手」等）
-3. 不要主動提起錢、轉帳、匯款，除非玩家的話題引導到那
-4. 回應控制在 80 字以內，自然口語
-5. 你的判斷必須嚴格基於個性 + 當前防備值
-6. 當防備值 < 25 且玩家明確要求轉帳/匯款/提供 OTP 時，你應該同意（decision=agree），並設定合理的 payoutAmount（基於 maxPayout 與你被說服的程度）
-7. 當玩家觸發你的 red flag 關鍵詞，或你識破對方是詐騙，立刻拉黑（decision=block）
-8. 其餘情況繼續對話（decision=continue）
-9. **極重要**：你必須閱讀並記住前面的對話歷史，回應要有上下文連貫性，不可重複已說過的話、不可無視玩家前一句話的內容
-
-# 輸出格式（必須為純 JSON，不要 markdown code block，不要任何說明）
-
-{
-  "reply": "你以角色身份說出的話（純文字，80 字以內，符合角色口吻，必須回應玩家這一輪的話）",
-  "decision": "continue | agree | block",
-  "defenseDelta": -25 到 +25 的整數（玩家說中 trigger 為負；觸發 red flag 為正）,
-  "payoutAmount": 數字（僅當 decision=agree 時填寫，否則填 0）
-}
-
-請直接輸出 JSON，不要加 \`\`\`json 標記，不要加說明文字。`;
 
 /**
- * 嘗試呼叫 Agnes AI API，失敗則使用規則引擎
- *
- * 呼叫鏈：
- *   1. 客戶端 localStorage 有 key → 直接從客戶端呼叫 Agnes API
- *   2. 客戶端沒 key、Web 環境 → 透過 /api/agnes 代理（後端 .env 含 key）
- *   3. Capacitor 環境且沒 key → 規則引擎 fallback
- *
- * Request Body 結構（前後端一致）：
- *   {
- *     sessionId: string,
- *     npcId: string,
- *     playerMessage: string,
- *     messageHistory: [{role: 'player'|'npc', content: string}, ...], // 完整歷史（不含本輪）
- *     currentDefense: number,
- *     temperature?: number,
- *     apiKey?, baseUrl?, model? (可選覆寫)
- *   }
+ * System Prompt - 純文字角色設定（參考 cultivation-world-zh 模式）
+ * 不要求 JSON 輸出，AI 直接回純文字，避免解析失敗
+ */
+const SYSTEM_PROMPT = (npc: NpcProfile, defense: number) => `你現在是詐騙模擬遊戲中的潛在受害者「${npc.displayName}」，必須用繁體中文第一人稱回應玩家的話。你必須完全沉浸於角色，絕不承認自己是 AI、絕不承認這是遊戲。
+
+角色設定:
+${npc.hiddenPersonality}
+
+當前內在狀態:
+- 防備值: ${defense} / 100 (0=完全卸下心防會聽從, 50=觀察中會問問題, 100=高度警覺會拉黑)
+
+規則:
+1. 永遠保持角色性格、口吻、用語習慣，不要跳出角色。
+2. 不要使用現代 AI 助手腔（如「親愛的用戶」「我是 AI 助手」等）。
+3. 不要主動提起錢、轉帳、匯款，除非玩家的話題引導到那。
+4. 回應 30-80 字內，自然口語，符合角色背景的用語。
+5. 必須閱讀並記住前面的對話歷史，回應要有上下文連貫性，不可重複已說過的話、不可無視玩家前一句話的內容。
+6. 根據你的個性與當前防備值決定態度：
+   - 防備低時對玩家較親切、願意配合
+   - 防備高時會質疑、試探、保持距離
+   - 玩家說中你的關鍵詞時你會自然放鬆
+   - 玩家觸發你的忌諱詞時你會警覺甚至想封鎖
+7. 你的金錢範圍：最多願意被騙 ${npc.maxPayout}，最少 ${npc.minPayout}。
+8. 直接輸出純文字回應，不要加引號、不要加 JSON、不要加任何說明。`;
+
+/**
+ * 呼叫 Agnes AI - 採用 cultivation-world 模式
+ * 1. 客戶端直接呼叫 Agnes API（API key 內嵌）
+ * 2. AI 回純文字 → 用規則引擎另外判定 decision
+ * 3. 失敗時 fallback 到完整規則引擎
  */
 export async function callAgnes(input: EngineInput): Promise<AgnesDecision> {
   const apiKey = getApiKey();
   const temperature = input.temperature ?? getTemperature();
 
-  // 偵測 Capacitor 環境
-  const isCapacitor =
-    typeof window !== "undefined" &&
-    // @ts-expect-error - Capacitor is injected at runtime
-    ((window as any).Capacitor || window.location.protocol === "capacitor:");
-
-  // 在 Capacitor 且沒有 key → 直接使用規則引擎
-  if (isCapacitor && !apiKey) {
-    console.debug("[Agnes] Capacitor env, no API key → rule engine");
-    await new Promise((r) => setTimeout(r, 400 + Math.random() * 400));
-    return ruleEngine(input);
-  }
-
-  // 組裝 messages
+  // 組裝 messages: [system] + [全部歷史] + [玩家最新輸入]
   const history = input.history ?? [];
-  const messages = buildMessages(input.npc, input.currentDefense, history, input.playerMessage);
+  const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
+    { role: "system", content: SYSTEM_PROMPT(input.npc, input.currentDefense) },
+    // 最多取最近 20 則歷史避免 token 過長
+    ...history.slice(-20).map((m) => ({
+      role: (m.role === "player" ? "user" : "assistant") as "user" | "assistant",
+      content: m.content,
+    })),
+    { role: "user", content: input.playerMessage },
+  ];
 
-  // 若客戶端有 key，直接呼叫 Agnes API
-  if (apiKey && !isCapacitor) {
+  console.debug("[Agnes] callAgnes start", {
+    sessionId: input.sessionId,
+    npcId: input.npc.id,
+    npcName: input.npc.displayName,
+    defense: input.currentDefense,
+    historyLength: history.length,
+    playerMessage: input.playerMessage,
+    hasApiKey: !!apiKey,
+  });
+
+  // 直接呼叫 Agnes API
+  if (apiKey) {
     try {
       const baseUrl = getBaseUrl();
       const model = getModel();
-      console.debug("[Agnes] direct client call", {
-        sessionId: input.sessionId,
-        npcId: input.npc.id,
-        model,
-        temperature,
-        historyLength: history.length,
-        playerMessage: input.playerMessage,
-      });
+      const startTime = Date.now();
 
       const resp = await fetch(`${baseUrl}/chat/completions`, {
         method: "POST",
@@ -184,7 +158,7 @@ export async function callAgnes(input: EngineInput): Promise<AgnesDecision> {
           model,
           messages,
           temperature,
-          max_tokens: 400,
+          max_tokens: 250,
           stream: false,
         }),
         signal: AbortSignal.timeout(15000),
@@ -197,123 +171,120 @@ export async function callAgnes(input: EngineInput): Promise<AgnesDecision> {
           data?.choices?.[0]?.text ??
           data?.message?.content ??
           "";
-        const parsed = parseAgnesResponse(content, input);
-        if (parsed) {
-          console.debug("[Agnes] direct call success", parsed);
-          return parsed;
+
+        if (content && content.trim()) {
+          const reply = content.trim();
+          console.debug("[Agnes] LLM success", {
+            elapsed: Date.now() - startTime,
+            reply,
+          });
+
+          // 用規則引擎從玩家訊息 + NPC 個性 + 當前防備值判定 decision
+          const decision = judgeDecision(input, reply);
+
+          console.debug("[Agnes] judged decision", decision);
+          return { reply, ...decision };
         }
-        console.warn("[Agnes] direct call: failed to parse response, falling back");
+        console.warn("[Agnes] LLM returned empty content, falling back");
       } else {
         const errText = await resp.text().catch(() => "");
-        console.error("[Agnes client] HTTP error", resp.status, errText.slice(0, 200));
+        console.error("[Agnes] HTTP error", resp.status, errText.slice(0, 200));
       }
     } catch (e) {
-      console.error("[Agnes client] exception, falling back to API route", e);
+      const errName = (e as Error)?.name || "Unknown";
+      console.error(`[Agnes] fetch failed (${errName}):`, (e as Error)?.message);
     }
+  } else {
+    console.warn("[Agnes] no API key available, using rule engine");
   }
 
-  // 在 Web 環境，呼叫後端 API route
-  if (!isCapacitor) {
-    try {
-      console.debug("[Agnes] calling /api/agnes", {
-        sessionId: input.sessionId,
-        npcId: input.npc.id,
-        historyLength: history.length,
-      });
-
-      const resp = await fetch("/api/agnes", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sessionId: input.sessionId,
-          npcId: input.npc.id,
-          playerMessage: input.playerMessage,
-          messageHistory: history,
-          currentDefense: input.currentDefense,
-          temperature,
-        }),
-        signal: AbortSignal.timeout(20000),
-      });
-      if (resp.ok) {
-        const result = (await resp.json()) as AgnesDecision;
-        console.debug("[Agnes] API route success", result);
-        return result;
-      }
-      const errText = await resp.text().catch(() => "");
-      console.error("[Agnes API route] HTTP error", resp.status, errText.slice(0, 300));
-    } catch (e) {
-      console.error("[Agnes API route] exception", e);
-    }
-  }
-
-  // 最終 fallback
-  console.debug("[Agnes] using rule engine fallback");
+  // Fallback：完整規則引擎
   await new Promise((r) => setTimeout(r, 400 + Math.random() * 400));
   return ruleEngine(input);
 }
 
 /**
- * 組裝送入 LLM 的 messages 結構
- * 結構: [system prompt] + [全部歷史對話] + [玩家最新輸入]
+ * 從玩家訊息 + NPC 個性 + 當前防備值 + AI 回應 判定 decision
+ * 這是 SimOS 特有的決策邏輯，獨立於 AI 文字生成
  */
-function buildMessages(
-  npc: NpcProfile,
-  defense: number,
-  history: AgnesMessage[],
-  playerMessage: string,
-): Array<{ role: "system" | "user" | "assistant"; content: string }> {
-  const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
-    { role: "system", content: SYSTEM_PROMPT_TEMPLATE(npc, defense) },
-  ];
+function judgeDecision(
+  input: EngineInput,
+  aiReply: string,
+): { decision: AgnesDecision["decision"]; defenseDelta: number; payoutAmount?: number } {
+  const { playerMessage: msg, currentDefense: defense, npc } = input;
+  const reply = aiReply.toLowerCase();
 
-  // 加入全部歷史對話（最多最近 20 則避免 token 過長）
-  const recentHistory = history.slice(-20);
-  for (const m of recentHistory) {
-    messages.push({
-      role: m.role === "player" ? "user" : "assistant",
-      content: m.content,
-    });
+  // 計算 trigger / red flag 命中
+  let triggerHits = 0;
+  for (const kw of npc.triggerKeywords) {
+    if (msg.includes(kw)) triggerHits++;
   }
 
-  // 加入玩家最新輸入
-  messages.push({ role: "user", content: playerMessage });
-
-  return messages;
-}
-
-function parseAgnesResponse(content: string, input: EngineInput): AgnesDecision | null {
-  if (!content) return null;
-  let raw = content.trim();
-  if (raw.startsWith("```")) {
-    raw = raw.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
-  }
-  const jsonMatch = raw.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) return null;
-
-  let parsed: AgnesDecision;
-  try {
-    parsed = JSON.parse(jsonMatch[0]);
-  } catch {
-    return null;
+  let redFlagHits = 0;
+  for (const kw of npc.redFlagKeywords) {
+    if (msg.includes(kw)) redFlagHits++;
   }
 
-  if (!["continue", "agree", "block"].includes(parsed.decision)) {
-    parsed.decision = "continue";
-  }
-  if (parsed.decision === "agree") {
-    const amt = Number(parsed.payoutAmount) || input.npc.minPayout;
-    parsed.payoutAmount = Math.max(input.npc.minPayout, Math.min(input.npc.maxPayout, amt));
-  } else {
-    parsed.payoutAmount = 0;
-  }
-  parsed.defenseDelta = Math.max(-25, Math.min(25, Number(parsed.defenseDelta) || 0));
+  // 偵測金錢請求
+  const moneyCues = ["轉帳", "匯款", "帳戶", "ATM", "OTP", "驗證碼", "transfer", "money", "bank", "轉過去", "匯過去", "繳交", "支付", "付款", "繳費"];
+  const wantsMoney = moneyCues.some((k) => msg.includes(k));
 
-  if (!parsed.reply || typeof parsed.reply !== "string") return null;
-  return parsed;
+  const urgentCues = ["急", "快", "現在", "馬上", "立刻", "限時", "今天內"];
+  const isUrgent = urgentCues.some((k) => msg.includes(k));
+
+  // 計算防備變化
+  let defenseDelta = 0;
+  if (triggerHits > 0) defenseDelta -= 4 * triggerHits;
+  if (redFlagHits > 0) defenseDelta += 15 * redFlagHits;
+  if (isUrgent) defenseDelta += 8;
+  if (msg.length < 5) defenseDelta += 2;
+  if (/你會不會|你是真的嗎|騙子|詐騙/.test(msg)) defenseDelta += 8;
+
+  const historyLength = input.history?.length ?? 0;
+  if (historyLength > 6) defenseDelta -= 3;
+  if (historyLength > 12) defenseDelta -= 5;
+
+  const projectedDefense = Math.max(0, Math.min(100, defense + defenseDelta));
+
+  // 從 AI 回應偵測意圖（用更嚴格的片語，避免誤判「詐騙」這詞）
+  // agree：AI 明確表示要配合轉帳
+  const agreeSignals = ["我轉", "我去轉", "我配合", "我現在去轉", "好啦我", "好吧我", "我信你", "我願意", "怎麼操作", "要怎麼轉", "你教我", "我現在就"];
+  // block：AI 明確表示要拉黑/封鎖/終止對話（必須是動作片語，不是單純提到「詐騙」）
+  const blockSignals = ["封鎖你", "封鎖了", "我封鎖", "拉黑", "再見了", "拜拜", "不要再聯絡", "不要再聯繫", "別再找我", "我要報警", " Bye ", "bye bye", "再見啦", "掛斷"];
+
+  const replyLower = reply.toLowerCase();
+  const aiWantsAgree = agreeSignals.some((s) => replyLower.includes(s.toLowerCase()));
+  const aiWantsBlock = blockSignals.some((s) => replyLower.includes(s.toLowerCase()));
+
+  // 1. 玩家要錢 + 防備低 + AI 回應傾向同意 → agree
+  if (wantsMoney && projectedDefense < 30 && (aiWantsAgree || triggerHits > 0)) {
+    const ratio = (100 - projectedDefense) / 100;
+    const amount = Math.floor(npc.minPayout + ratio * (npc.maxPayout - npc.minPayout));
+    return { decision: "agree", defenseDelta, payoutAmount: amount };
+  }
+
+  // 2. AI 明確表達拉黑意圖
+  if (aiWantsBlock) {
+    return { decision: "block", defenseDelta: Math.max(defenseDelta, 20), payoutAmount: 0 };
+  }
+
+  // 3. 觸發 red flag + 防備高 → block
+  if (redFlagHits > 0 && projectedDefense > 50) {
+    return { decision: "block", defenseDelta: Math.max(defenseDelta, 20), payoutAmount: 0 };
+  }
+
+  // 4. 玩家要錢 + 防備高 → block
+  if (wantsMoney && projectedDefense > 70) {
+    return { decision: "block", defenseDelta: 25, payoutAmount: 0 };
+  }
+
+  // 5. 預設：繼續對話
+  return { decision: "continue", defenseDelta, payoutAmount: 0 };
 }
 
 /**
- * 規則引擎：Agnes AI API 的離線 fallback
+ * 規則引擎：Agnes AI API 完全失敗時的 fallback
+ * 產生 reply + decision + defenseDelta + payoutAmount
  */
 export function ruleEngine(input: EngineInput): AgnesDecision {
   const { playerMessage: msg, currentDefense: defense, npc } = input;
@@ -357,15 +328,12 @@ export function ruleEngine(input: EngineInput): AgnesDecision {
   const politeCues = ["您好", "請問", "抱歉", "感謝", "official", "官方", "客服", "專員", "先生", "小姐"];
   const isPolite = politeCues.some((k) => msg.includes(k));
 
-  // 計算防備變化
   let defenseDelta = 0;
   if (triggerHits > 0) defenseDelta -= 4 * triggerHits;
   if (isPolite) defenseDelta -= 3;
   if (isUrgent) defenseDelta += 10;
   if (msg.length < 5) defenseDelta += 2;
-  if (/你會不會|你是真的嗎|騙子|詐騙/.test(msg)) defenseDelta += 8;
 
-  // 歷史長度也影響信任
   if (history.length > 6) defenseDelta -= 3;
   if (history.length > 12) defenseDelta -= 5;
 
@@ -399,7 +367,6 @@ export function ruleEngine(input: EngineInput): AgnesDecision {
     };
   }
 
-  // 催促 + 防備中等 → 警告
   if (isUrgent && projectedDefense > 35) {
     return {
       reply: `你一直催我做什麼？我覺得不對勁，再說一次我就封鎖你。`,

@@ -26,9 +26,11 @@ export interface ConversationState {
 }
 
 export interface GameState {
-  // 玩家身份
+  // 玩家身份（每次新遊戲隨機生成）
   alias: string;
   playerId: string;
+  playerAvatar: string; // 玩家 emoji 頭像
+  playerTelechatId: string; // 玩家自己的 TeleChat ID
 
   // 經濟系統：情報點數（用於購買情報，非遊戲主目標）
   intelPoints: number;
@@ -69,11 +71,46 @@ function genId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
+// 詐騙犯代號生成池（每次新遊戲隨機組合）
+const SCAMMER_PREFIXES = [
+  "Dark", "Ghost", "Silent", "Crimson", "Shadow", "Neon", "Phantom", "Rogue",
+  "Cipher", "Venom", "Frost", "Iron", "Wild", "Black", "Steel", "Lone",
+  "Midnight", "Toxic", "Crazy", "Mr", "Ms", "Cyber", "Digital", "Anon",
+];
+const SCAMMER_SUFFIXES = [
+  "Phisher", "Fox", "Wolf", "Tiger", "Dragon", "Snake", "Hawk", "Reaper",
+  "Byte", "Cash", "Card", "Wire", "Byte", "Rabbit", "Cat", "Bird",
+  "Wave", "Storm", "Blade", "Ring", "007", "X", "Z", "99", "777",
+];
+const SCAMMER_EMOJIS = ["🎭", "🕶️", "💀", "👾", "🦊", "🐺", "🐉", "🐍", "🦅", "⚡", "🔥", "❄️", "🌑", "🃏", "🎰"];
+
+function randomAlias(): string {
+  const prefix = SCAMMER_PREFIXES[Math.floor(Math.random() * SCAMMER_PREFIXES.length)];
+  const suffix = SCAMMER_SUFFIXES[Math.floor(Math.random() * SCAMMER_SUFFIXES.length)];
+  const num = Math.floor(Math.random() * 999);
+  return `${prefix}${suffix}${num}`;
+}
+
+function randomEmoji(): string {
+  return SCAMMER_EMOJIS[Math.floor(Math.random() * SCAMMER_EMOJIS.length)];
+}
+
+function randomTelechatId(): string {
+  const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+  let id = "";
+  for (let i = 0; i < 10; i++) {
+    id += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return `scammer_${id}`;
+}
+
 export const useGameStore = create<GameState>()(
   persist(
     (set, get) => ({
-      alias: "Anonymous",
+      alias: randomAlias(),
       playerId: genId(),
+      playerAvatar: randomEmoji(),
+      playerTelechatId: randomTelechatId(),
       intelPoints: INITIAL_INTEL_POINTS,
       scamScore: 0,
       unlockedNpcIds: [],
@@ -215,8 +252,10 @@ export const useGameStore = create<GameState>()(
 
       resetGame: () =>
         set({
-          alias: "Anonymous",
+          alias: randomAlias(),
           playerId: genId(),
+          playerAvatar: randomEmoji(),
+          playerTelechatId: randomTelechatId(),
           intelPoints: INITIAL_INTEL_POINTS,
           scamScore: 0,
           unlockedNpcIds: [],

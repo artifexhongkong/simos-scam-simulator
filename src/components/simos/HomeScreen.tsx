@@ -22,6 +22,8 @@ interface AppTile {
 
 export function HomeScreen({ onOpenApp, intelPoints, scamScore }: HomeScreenProps) {
   const conversations = useGameStore((s) => s.conversations);
+  const alias = useGameStore((s) => s.alias);
+  const playerAvatar = useGameStore((s) => s.playerAvatar);
 
   // 計算進行中的對話數
   const activeConvCount = Object.values(conversations).filter((c) => c.status === "active").length;
@@ -68,9 +70,14 @@ export function HomeScreen({ onOpenApp, intelPoints, scamScore }: HomeScreenProp
         className="mb-6"
       >
         <div className="flex items-center justify-between">
-          <div>
-            <p className="text-white/50 text-xs">歡迎回來</p>
-            <h1 className="text-white text-xl font-bold tracking-tight">SimOS</h1>
+          <div className="flex items-center gap-2.5">
+            <div className="w-11 h-11 rounded-full bg-gradient-to-br from-zinc-700 to-zinc-900 border border-white/10 flex items-center justify-center text-2xl">
+              {playerAvatar}
+            </div>
+            <div>
+              <p className="text-white/50 text-[10px]">詐騙犯代號</p>
+              <h1 className="text-white text-base font-bold tracking-tight leading-tight">{alias}</h1>
+            </div>
           </div>
           <div className="flex flex-col items-end gap-1">
             <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30">

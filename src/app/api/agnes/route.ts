@@ -5,64 +5,41 @@ import { ruleEngine, type AgnesDecision, type AgnesMessage } from "@/lib/agnes/e
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const AGNES_API_KEY = process.env.AGNES_API_KEY || "";
-const AGNES_BASE_URL = (process.env.AGNES_BASE_URL || "https://apihub.agnes-ai.com/v1").replace(/\/$/, "");
-const AGNES_MODEL = process.env.AGNES_MODEL || "agnes-2.5-flash";
-const AGNES_TEMPERATURE = parseFloat(process.env.AGNES_TEMPERATURE || "0.85");
+// 後端環境變數（fallback）
+const AGNES_API_KEY = process.env.AGNES_API_KEY || process.env.NEXT_PUBLIC_AGNES_API_KEY || "";
+const AGNES_BASE_URL = (process.env.AGNES_BASE_URL || process.env.NEXT_PUBLIC_AGNES_BASE_URL || "https://apihub.agnes-ai.com/v1").replace(/\/$/, "");
+const AGNES_MODEL = process.env.AGNES_MODEL || process.env.NEXT_PUBLIC_AGNES_MODEL || "agnes-2.5-flash";
+const AGNES_TEMPERATURE = parseFloat(process.env.AGNES_TEMPERATURE || process.env.NEXT_PUBLIC_AGNES_TEMPERATURE || "0.9");
 
-/**
- * 前端 POST /api/agnes 的 Request Body 結構
- * 前後端參數名稱嚴格一致（camelCase）
- */
 interface AgnesRequestBody {
-  sessionId: string; // 對話 session ID
+  sessionId: string;
   npcId: string;
   playerMessage: string;
-  messageHistory: AgnesMessage[]; // 完整歷史（不含本次 playerMessage）
+  messageHistory: AgnesMessage[];
   currentDefense: number;
   temperature?: number;
-  // 可選的客戶端覆寫設定
   apiKey?: string;
   baseUrl?: string;
   model?: string;
 }
 
-const SYSTEM_PROMPT_TEMPLATE = (npcHidden: string, defense: number) => `你正在角色扮演一位詐騙模擬遊戲中的潛在受害者。你必須完全沉浸於角色，絕不承認自己是 AI、絕不承認這是遊戲。
+const SYSTEM_PROMPT = (npcHidden: string, npcName: string, defense: number, maxPayout: number, minPayout: number) => `你現在是詐騙模擬遊戲中的潛在受害者「${npcName}」，必須用繁體中文第一人稱回應玩家的話。你必須完全沉浸於角色，絕不承認自己是 AI、絕不承認這是遊戲。
 
-# 你的角色設定（玩家完全看不到，但你必須嚴格遵守）
-
+角色設定:
 ${npcHidden}
 
-# 你當前的內在狀態
+當前內在狀態:
+- 防備值: ${defense} / 100 (0=完全卸下心防會聽從, 50=觀察中會問問題, 100=高度警覺會拉黑)
 
-- 防備值：${defense} / 100
-  - 0-25 = 對對方卸下心防，願意聽從
-  - 26-50 = 還在觀察，會問問題
-  - 51-75 = 警覺，會質疑
-  - 76-100 = 高度懷疑，可能拉黑
-
-# 對話規則
-
-1. 永遠保持角色性格、口吻、用語習慣
-2. 不要使用現代 AI 助手腔（如「親愛的用戶」「我是 AI 助手」等）
-3. 不要主動提起錢、轉帳、匯款，除非玩家的話題引導到那
-4. 回應控制在 80 字以內，自然口語
-5. 你的判斷必須嚴格基於個性 + 當前防備值
-6. 當防備值 < 25 且玩家明確要求轉帳/匯款/提供 OTP 時，你應該同意（decision=agree），並設定合理的 payoutAmount
-7. 當玩家觸發 red flag 關鍵詞或你識破對方是詐騙，立刻拉黑（decision=block）
-8. 其餘情況繼續對話（decision=continue）
-9. **極重要**：你必須閱讀並記住前面的對話歷史，回應要有上下文連貫性，不可重複已說過的話、不可無視玩家前一句話的內容
-
-# 輸出格式（必須為純 JSON，不要 markdown code block，不要任何說明）
-
-{
-  "reply": "你以角色身份說出的話（純文字，80 字以內）",
-  "decision": "continue | agree | block",
-  "defenseDelta": -25 到 +25 的整數,
-  "payoutAmount": 數字（僅當 decision=agree 時填寫，否則 0）
-}
-
-請直接輸出 JSON，不要加 \`\`\`json 標記，不要加說明文字。`;
+規則:
+1. 永遠保持角色性格、口吻、用語習慣，不要跳出角色。
+2. 不要使用現代 AI 助手腔。
+3. 不要主動提起錢、轉帳、匯款，除非玩家的話題引導到那。
+4. 回應 30-80 字內，自然口語，符合角色背景的用語。
+5. 必須閱讀並記住前面的對話歷史，回應要有上下文連貫性。
+6. 根據你的個性與當前防備值決定態度。
+7. 你的金錢範圍：最多願意被騙 ${maxPayout}，最少 ${minPayout}。
+8. 直接輸出純文字回應，不要加引號、不要加 JSON、不要加任何說明。`;
 
 export async function POST(req: NextRequest) {
   const startTime = Date.now();
@@ -72,36 +49,31 @@ export async function POST(req: NextRequest) {
     const npc = NPCS.find((n) => n.id === body.npcId);
 
     if (!npc) {
-      console.error("[/api/agnes] NPC not found:", body.npcId);
-      return NextResponse.json(
-        { error: "NPC_NOT_FOUND", message: `NPC not found: ${body.npcId}` },
-        { status: 404 },
-      );
+      return NextResponse.json({ error: "NPC_NOT_FOUND" }, { status: 404 });
     }
 
-    // 客戶端可覆寫設定
     const apiKey = body.apiKey || AGNES_API_KEY;
     const baseUrl = (body.baseUrl || AGNES_BASE_URL).replace(/\/$/, "");
     const model = body.model || AGNES_MODEL;
     const temperature = body.temperature ?? AGNES_TEMPERATURE;
     const history = body.messageHistory ?? [];
 
-    // 沒有 API key → 直接使用規則引擎
     if (!apiKey) {
-      console.warn(`[/api/agnes] no API key, using rule engine. session=${body.sessionId} npc=${body.npcId}`);
-      const result = ruleEngine({
-        sessionId: body.sessionId,
-        npc,
-        playerMessage: body.playerMessage,
-        currentDefense: body.currentDefense,
-        history,
-      });
-      return NextResponse.json(result);
+      console.warn(`[/api/agnes] no API key, rule engine. session=${body.sessionId}`);
+      return NextResponse.json(
+        ruleEngine({
+          sessionId: body.sessionId,
+          npc,
+          playerMessage: body.playerMessage,
+          currentDefense: body.currentDefense,
+          history,
+        }),
+      );
     }
 
-    // 組裝 messages：[system] + [全部歷史] + [玩家最新輸入]
+    // 組裝 messages: [system] + [歷史] + [玩家輸入]
     const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
-      { role: "system", content: SYSTEM_PROMPT_TEMPLATE(npc.hiddenPersonality, body.currentDefense) },
+      { role: "system", content: SYSTEM_PROMPT(npc.hiddenPersonality, npc.displayName, body.currentDefense, npc.maxPayout, npc.minPayout) },
       ...history.slice(-20).map((m) => ({
         role: (m.role === "player" ? "user" : "assistant") as "user" | "assistant",
         content: m.content,
@@ -109,18 +81,11 @@ export async function POST(req: NextRequest) {
       { role: "user", content: body.playerMessage },
     ];
 
-    // === 除錯日誌：完整送入模型的 Prompt 內容 ===
     console.log(`[/api/agnes] ====== LLM CALL ======`);
     console.log(`[/api/agnes] session: ${body.sessionId}`);
     console.log(`[/api/agnes] npc: ${npc.displayName} (defense=${body.currentDefense})`);
-    console.log(`[/api/agnes] model: ${model}, temperature: ${temperature}`);
-    console.log(`[/api/agnes] history length: ${history.length}`);
-    console.log(`[/api/agnes] player message: ${body.playerMessage}`);
-    console.log(`[/api/agnes] total messages to LLM: ${messages.length}`);
-    console.log(
-     `[/api/agnes] messages preview:`,
-      messages.map((m) => ({ role: m.role, contentPreview: m.content.slice(0, 80) })),
-    );
+    console.log(`[/api/agnes] model: ${model}, temp: ${temperature}`);
+    console.log(`[/api/agnes] history: ${history.length}, player: ${body.playerMessage.slice(0, 80)}`);
 
     try {
       const resp = await fetch(`${baseUrl}/chat/completions`, {
@@ -133,7 +98,7 @@ export async function POST(req: NextRequest) {
           model,
           messages,
           temperature,
-          max_tokens: 400,
+          max_tokens: 250,
           stream: false,
         }),
         signal: AbortSignal.timeout(15000),
@@ -141,16 +106,16 @@ export async function POST(req: NextRequest) {
 
       if (!resp.ok) {
         const errText = await resp.text().catch(() => "");
-        console.error(`[/api/agnes] Agnes API HTTP error ${resp.status}:`, errText.slice(0, 500));
-        // 失敗 → fallback
-        const fallback = ruleEngine({
-          sessionId: body.sessionId,
-          npc,
-          playerMessage: body.playerMessage,
-          currentDefense: body.currentDefense,
-          history,
-        });
-        return NextResponse.json(fallback);
+        console.error(`[/api/agnes] HTTP ${resp.status}:`, errText.slice(0, 200));
+        return NextResponse.json(
+          ruleEngine({
+            sessionId: body.sessionId,
+            npc,
+            playerMessage: body.playerMessage,
+            currentDefense: body.currentDefense,
+            history,
+          }),
+        );
       }
 
       const data = await resp.json();
@@ -160,102 +125,103 @@ export async function POST(req: NextRequest) {
         data?.message?.content ??
         "";
 
-      console.log(`[/api/agnes] LLM raw response:`, content.slice(0, 300));
-      console.log(`[/api/agnes] elapsed: ${Date.now() - startTime}ms`);
+      console.log(`[/api/agnes] LLM reply (${Date.now() - startTime}ms):`, content.slice(0, 200));
 
-      if (!content) {
-        console.error("[/api/agnes] LLM returned empty content");
-        const fallback = ruleEngine({
-          sessionId: body.sessionId,
-          npc,
-          playerMessage: body.playerMessage,
-          currentDefense: body.currentDefense,
-          history,
-        });
-        return NextResponse.json(fallback);
-      }
-
-      // 解析 JSON（可能被包在 ```json ... ``` 內）
-      let raw = content.trim();
-      if (raw.startsWith("```")) {
-        raw = raw.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
-      }
-      const jsonMatch = raw.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        console.error("[/api/agnes] no JSON found in LLM response");
-        const fallback = ruleEngine({
-          sessionId: body.sessionId,
-          npc,
-          playerMessage: body.playerMessage,
-          currentDefense: body.currentDefense,
-          history,
-        });
-        return NextResponse.json(fallback);
+      if (!content || !content.trim()) {
+        return NextResponse.json(
+          ruleEngine({
+            sessionId: body.sessionId,
+            npc,
+            playerMessage: body.playerMessage,
+            currentDefense: body.currentDefense,
+            history,
+          }),
+        );
       }
 
-      let parsed: AgnesDecision;
-      try {
-        parsed = JSON.parse(jsonMatch[0]);
-      } catch (e) {
-        console.error("[/api/agnes] JSON parse failed:", e, "raw:", jsonMatch[0].slice(0, 200));
-        const fallback = ruleEngine({
-          sessionId: body.sessionId,
-          npc,
-          playerMessage: body.playerMessage,
-          currentDefense: body.currentDefense,
-          history,
-        });
-        return NextResponse.json(fallback);
-      }
+      const reply = content.trim();
 
-      // 驗證
-      if (!["continue", "agree", "block"].includes(parsed.decision)) {
-        parsed.decision = "continue";
-      }
-      if (parsed.decision === "agree") {
-        const amt = Number(parsed.payoutAmount) || npc.minPayout;
-        parsed.payoutAmount = Math.max(npc.minPayout, Math.min(npc.maxPayout, amt));
-      } else {
-        parsed.payoutAmount = 0;
-      }
-      parsed.defenseDelta = Math.max(-25, Math.min(25, Number(parsed.defenseDelta) || 0));
+      // 用規則引擎判定 decision（不要求 AI 輸出 JSON）
+      const decision = judgeDecision({ npc, playerMessage: body.playerMessage, currentDefense: body.currentDefense, history } as any, reply);
 
-      if (!parsed.reply || typeof parsed.reply !== "string") {
-        const fallback = ruleEngine({
-          sessionId: body.sessionId,
-          npc,
-          playerMessage: body.playerMessage,
-          currentDefense: body.currentDefense,
-          history,
-        });
-        return NextResponse.json(fallback);
-      }
+      const result: AgnesDecision = { reply, ...decision };
+      console.log(`[/api/agnes] final:`, result);
 
-      console.log(`[/api/agnes] success:`, parsed);
-      return NextResponse.json(parsed);
+      return NextResponse.json(result);
     } catch (fetchErr) {
-      // 區分超時與其他錯誤
       const errName = (fetchErr as Error)?.name || "Unknown";
-      const errMsg = (fetchErr as Error)?.message || "";
-      if (errName === "TimeoutError" || errName === "AbortError") {
-        console.error(`[/api/agnes] Agnes API TIMEOUT after ${Date.now() - startTime}ms`);
-      } else {
-        console.error(`[/api/agnes] fetch failed (${errName}):`, errMsg);
-      }
-      const fallback = ruleEngine({
-        sessionId: body.sessionId,
-        npc,
-        playerMessage: body.playerMessage,
-        currentDefense: body.currentDefense,
-        history,
-      });
-      return NextResponse.json(fallback);
+      console.error(`[/api/agnes] fetch failed (${errName}):`, (fetchErr as Error)?.message);
+      return NextResponse.json(
+        ruleEngine({
+          sessionId: body.sessionId,
+          npc,
+          playerMessage: body.playerMessage,
+          currentDefense: body.currentDefense,
+          history,
+        }),
+      );
     }
   } catch (e) {
-    console.error("[/api/agnes] route exception:", e);
-    return NextResponse.json(
-      { error: "INTERNAL_ERROR", message: (e as Error)?.message || "Internal error" },
-      { status: 500 },
-    );
+    console.error("[/api/agnes] exception:", e);
+    return NextResponse.json({ error: "INTERNAL_ERROR", message: (e as Error)?.message }, { status: 500 });
   }
+}
+
+// 從 engine.ts 引入（避免重複）
+function judgeDecision(
+  input: { npc: any; playerMessage: string; currentDefense: number; history: any[] },
+  aiReply: string,
+): { decision: "continue" | "agree" | "block"; defenseDelta: number; payoutAmount?: number } {
+  const { npc, playerMessage: msg, currentDefense: defense, history } = input;
+  const reply = aiReply.toLowerCase();
+
+  let triggerHits = 0;
+  for (const kw of npc.triggerKeywords) {
+    if (msg.includes(kw)) triggerHits++;
+  }
+  let redFlagHits = 0;
+  for (const kw of npc.redFlagKeywords) {
+    if (msg.includes(kw)) redFlagHits++;
+  }
+
+  const moneyCues = ["轉帳", "匯款", "帳戶", "ATM", "OTP", "驗證碼", "transfer", "money", "bank", "轉過去", "匯過去", "繳交", "支付", "付款", "繳費"];
+  const wantsMoney = moneyCues.some((k) => msg.includes(k));
+
+  const urgentCues = ["急", "快", "現在", "馬上", "立刻", "限時", "今天內"];
+  const isUrgent = urgentCues.some((k) => msg.includes(k));
+
+  let defenseDelta = 0;
+  if (triggerHits > 0) defenseDelta -= 4 * triggerHits;
+  if (redFlagHits > 0) defenseDelta += 15 * redFlagHits;
+  if (isUrgent) defenseDelta += 8;
+  if (msg.length < 5) defenseDelta += 2;
+  if (/你會不會|你是真的嗎|騙子|詐騙/.test(msg)) defenseDelta += 8;
+
+  const historyLength = history?.length ?? 0;
+  if (historyLength > 6) defenseDelta -= 3;
+  if (historyLength > 12) defenseDelta -= 5;
+
+  const projectedDefense = Math.max(0, Math.min(100, defense + defenseDelta));
+
+  const agreeSignals = ["我轉", "我去轉", "我配合", "我現在去轉", "好啦我", "好吧我", "我信你", "我願意", "怎麼操作", "要怎麼轉", "你教我", "我現在就"];
+  const blockSignals = ["封鎖你", "封鎖了", "我封鎖", "拉黑", "再見了", "拜拜", "不要再聯絡", "不要再聯繫", "別再找我", "我要報警", " Bye ", "bye bye", "再見啦", "掛斷"];
+  const replyLower = reply.toLowerCase();
+  const aiWantsAgree = agreeSignals.some((s) => replyLower.includes(s.toLowerCase()));
+  const aiWantsBlock = blockSignals.some((s) => replyLower.includes(s.toLowerCase()));
+
+  if (wantsMoney && projectedDefense < 30 && (aiWantsAgree || triggerHits > 0)) {
+    const ratio = (100 - projectedDefense) / 100;
+    const amount = Math.floor(npc.minPayout + ratio * (npc.maxPayout - npc.minPayout));
+    return { decision: "agree", defenseDelta, payoutAmount: amount };
+  }
+  if (aiWantsBlock) {
+    return { decision: "block", defenseDelta: Math.max(defenseDelta, 20), payoutAmount: 0 };
+  }
+  if (redFlagHits > 0 && projectedDefense > 50) {
+    return { decision: "block", defenseDelta: Math.max(defenseDelta, 20), payoutAmount: 0 };
+  }
+  if (wantsMoney && projectedDefense > 70) {
+    return { decision: "block", defenseDelta: 25, payoutAmount: 0 };
+  }
+  return { decision: "continue", defenseDelta, payoutAmount: 0 };
 }

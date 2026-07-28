@@ -171,8 +171,13 @@ function AddFriendScreen({
   const submit = async () => {
     setError(null);
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 400));
-    const result = addFriend(tid);
+    const currentTid = tid.trim();
+    if (!currentTid) {
+      setError("請輸入 TeleChat ID");
+      setLoading(false);
+      return;
+    }
+    const result = addFriend(currentTid);
     setLoading(false);
     if (result.ok && result.npcId) {
       onSuccess(result.npcId);

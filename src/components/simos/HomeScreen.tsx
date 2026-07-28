@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { MessageCircle, Skull, Trophy, Settings as SettingsIcon, Sparkles, TrendingUp, Users, Target } from "lucide-react";
+import { MessageCircle, Skull, Trophy, Settings as SettingsIcon, Sparkles } from "lucide-react";
 import type { AppName } from "./SimOS";
 import { useGameStore } from "@/lib/game/store";
 
@@ -24,11 +24,15 @@ export function HomeScreen({ onOpenApp, intelPoints, scamScore }: HomeScreenProp
   const alias = useGameStore((s) => s.alias);
   const playerAvatar = useGameStore((s) => s.playerAvatar);
   const theme = useGameStore((s) => s.theme);
-  const unlockedNpcIds = useGameStore((s) => s.unlockedNpcIds);
-  const friendNpcIds = useGameStore((s) => s.friendNpcIds);
 
-  const activeConvCount = Object.values(conversations).filter((c) => c.status === "active").length;
-  const succeededCount = Object.values(conversations).filter((c) => c.status === "succeeded").length;
+  // 計算未讀訊息數：活躍對話中，最後一則是 NPC 訊息 = 有未讀
+  const unreadCount = Object.values(conversations).filter((c) => {
+    if (c.status !== "active") return false;
+    const msgs = c.messages;
+    if (msgs.length === 0) return false;
+    const lastMsg = msgs[msgs.length - 1];
+    return lastMsg.role === "npc";
+  }).length;
 
   const apps: IOSAppTile[] = [
     {
@@ -36,7 +40,7 @@ export function HomeScreen({ onOpenApp, intelPoints, scamScore }: HomeScreenProp
       label: "TeleChat",
       icon: <MessageCircle className="w-8 h-8 text-white" strokeWidth={2} fill="white" />,
       bg: "linear-gradient(135deg, #5ac8fa 0%, #007aff 100%)",
-      badge: activeConvCount > 0 ? activeConvCount : undefined,
+      badge: unreadCount > 0 ? unreadCount : undefined,
     },
     {
       key: "broker",
@@ -73,8 +77,7 @@ export function HomeScreen({ onOpenApp, intelPoints, scamScore }: HomeScreenProp
       className="h-full min-h-0 flex flex-col overflow-hidden relative"
       style={{ background: bgStyle }}
     >
-      {/* 上半部：狀態欄 + 時間 + 玩家資訊 + 統計 + App 圖示 + 免責聲明
-          flex-1 佔滿中間區域，但內容靠上排列，下方自然留白 */}
+      {/* 上半部內容區 - flex-1 可滾動 */}
       <div className="flex-1 min-h-0 flex flex-col overflow-y-auto">
         {/* iOS 主畫面頂部時間顯示 */}
         <div className="pt-2 pb-1 text-center shrink-0">
@@ -100,7 +103,7 @@ export function HomeScreen({ onOpenApp, intelPoints, scamScore }: HomeScreenProp
                 {playerAvatar}
               </div>
               <div>
-                <p style={{ color: textSub, fontSize: "9px" }}>詐騙犯代號</p>
+                <p style={{ color: textSub, fontSize: "9px" }}>CC園區員工代號</p>
                 <p className="text-xs font-bold leading-tight" style={{ color: textMain }}>
                   {alias}
                 </p>
@@ -118,42 +121,8 @@ export function HomeScreen({ onOpenApp, intelPoints, scamScore }: HomeScreenProp
           </div>
         </motion.div>
 
-        {/* 遊戲進度統計小卡片 */}
-        <motion.div
-          initial={{ opacity: 0, y: -5 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.15 }}
-          className="mx-4 mb-4 shrink-0"
-        >
-          <div
-            className="rounded-2xl p-3 backdrop-blur-xl"
-            style={{ background: cardBg, border: cardBorder }}
-          >
-            <div className="grid grid-cols-3 gap-2">
-              <StatItem
-                icon={<Users className="w-3 h-3" />}
-                label="已解鎖"
-                value={`${unlockedNpcIds.length}`}
-                color="#5ac8fa"
-              />
-              <StatItem
-                icon={<MessageCircle className="w-3 h-3" />}
-                label="已加好友"
-                value={`${friendNpcIds.length}`}
-                color="#34c759"
-              />
-              <StatItem
-                icon={<TrendingUp className="w-3 h-3" />}
-                label="詐騙成功"
-                value={`${succeededCount}`}
-                color="#ff9500"
-              />
-            </div>
-          </div>
-        </motion.div>
-
         {/* iOS App 圖示網格 */}
-        <div className="px-5 py-2 shrink-0">
+        <div className="px-5 py-3 shrink-0">
           <div className="grid grid-cols-4 gap-x-4 gap-y-4">
             {apps.map((app, i) => (
               <motion.button
@@ -205,8 +174,7 @@ export function HomeScreen({ onOpenApp, intelPoints, scamScore }: HomeScreenProp
         </p>
       </div>
 
-      {/* 底部 Dock 欄 - shrink-0 確保永遠完整顯示
-          使用 sticky 位置 + safe-area-bottom 處理系統列 */}
+      {/* 底部 Dock 欄 - shrink-0 確保永遠完整顯示 */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -250,30 +218,6 @@ export function HomeScreen({ onOpenApp, intelPoints, scamScore }: HomeScreenProp
   );
 }
 
-function StatItem({
-  icon,
-  label,
-  value,
-  color,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  color: string;
-}) {
-  return (
-    <div className="flex flex-col items-center gap-0.5">
-      <div className="flex items-center gap-1" style={{ color }}>
-        {icon}
-        <span className="text-[10px] font-medium">{label}</span>
-      </div>
-      <span className="text-sm font-bold" style={{ color }}>
-        {value}
-      </span>
-    </div>
-  );
-}
-
 /** iOS 主畫面大時鐘 */
 function IOSTime() {
   const time = useCurrentTime();
@@ -294,4 +238,3 @@ function useCurrentTime() {
   const m = d.getMinutes().toString().padStart(2, "0");
   return `${h}:${m}`;
 }
-

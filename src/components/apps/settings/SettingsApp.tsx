@@ -18,10 +18,7 @@ import {
   Moon,
   Clock,
   Palette,
-  Smartphone,
-  Layers,
 } from "lucide-react";
-import { AppContainer } from "@/components/simos/Shell";
 import { useGameStore } from "@/lib/game/store";
 
 interface SettingsAppProps {
@@ -36,13 +33,10 @@ export function SettingsApp({ onBack }: SettingsAppProps) {
   const unlockedNpcIds = useGameStore((s) => s.unlockedNpcIds);
   const friendNpcIds = useGameStore((s) => s.friendNpcIds);
 
-  // UI 偏好
   const theme = useGameStore((s) => s.theme);
   const setTheme = useGameStore((s) => s.setTheme);
   const showTimestamps = useGameStore((s) => s.showTimestamps);
   const toggleTimestamps = useGameStore((s) => s.toggleTimestamps);
-  const uiStyle = useGameStore((s) => s.uiStyle);
-  const setUiStyle = useGameStore((s) => s.setUiStyle);
 
   const [aliasInput, setAliasInput] = useState(alias === "Anonymous" ? "" : alias);
   const [apiKey, setApiKey] = useState("");
@@ -100,9 +94,38 @@ export function SettingsApp({ onBack }: SettingsAppProps) {
     onBack();
   };
 
+  // iMessage CSS 變數（與主題連動）
+  const cardBg = "var(--im-bubble-npc-bg)";
+  const cardBorder = "var(--im-header-border)";
+  const textMain = "var(--im-header-text)";
+  const textSub = "var(--im-bubble-system-text)";
+
   return (
-    <AppContainer title="設定" onBack={onBack} headerColor="bg-zinc-800">
-      <div className="h-full min-h-0 overflow-y-auto">
+    <div
+      className="h-full min-h-0 flex flex-col overflow-hidden"
+      style={{ background: "var(--im-bg)" }}
+    >
+      {/* iOS 風格導航欄 */}
+      <div
+        className="flex items-center px-2 py-2 border-b backdrop-blur-xl shrink-0"
+        style={{
+          background: "var(--im-header-bg)",
+          borderColor: "var(--im-header-border)",
+        }}
+      >
+        <button
+          onClick={onBack}
+          className="text-[17px] font-normal px-1 active:opacity-50 transition"
+          style={{ color: "var(--im-link-text)" }}
+        >
+          ‹ 返回
+        </button>
+        <h2 className="flex-1 text-center text-[17px] font-semibold pr-12" style={{ color: textMain }}>
+          設定
+        </h2>
+      </div>
+
+      <div className="flex-1 min-h-0 overflow-y-auto">
         {savedFlash && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
@@ -114,77 +137,51 @@ export function SettingsApp({ onBack }: SettingsAppProps) {
           </motion.div>
         )}
 
-        <div className="p-4 space-y-5">
+        <div className="p-4 space-y-4">
           {/* 介面外觀 */}
-          <Section icon={<Palette className="w-4 h-4" />} title="介面外觀">
+          <Section icon={<Palette className="w-4 h-4" />} title="介面外觀" cardBg={cardBg} cardBorder={cardBorder} textMain={textMain} textSub={textSub}>
             <div className="space-y-3">
-              {/* 介面風格切換：原版深色 / iOS 模擬介面 */}
+              {/* 主題切換 */}
               <div className="space-y-1.5">
-                <label className="text-white/50 text-[11px] flex items-center gap-1">
-                  <Layers className="w-3 h-3" /> 介面風格
-                </label>
+                <label className="text-[11px]" style={{ color: textSub }}>主題模式</label>
                 <div className="grid grid-cols-2 gap-2">
                   <button
-                    onClick={() => setUiStyle("ios")}
+                    onClick={() => setTheme("light")}
                     className={`flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs font-medium transition ${
-                      uiStyle === "ios" ? "bg-blue-600 text-white" : "bg-zinc-800 text-white/60"
+                      theme === "light" ? "bg-blue-600 text-white" : "bg-zinc-200 text-zinc-600"
                     }`}
+                    style={theme !== "light" ? { background: "var(--im-bubble-npc-bg)", color: textSub } : {}}
                   >
-                    <Smartphone className="w-3.5 h-3.5" /> iOS 介面
+                    <Sun className="w-3.5 h-3.5" /> 淺色
                   </button>
                   <button
-                    onClick={() => setUiStyle("classic")}
+                    onClick={() => setTheme("dark")}
                     className={`flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs font-medium transition ${
-                      uiStyle === "classic" ? "bg-blue-600 text-white" : "bg-zinc-800 text-white/60"
+                      theme === "dark" ? "bg-blue-600 text-white" : "bg-zinc-200 text-zinc-600"
                     }`}
+                    style={theme !== "dark" ? { background: "var(--im-bubble-npc-bg)", color: textSub } : {}}
                   >
-                    <Layers className="w-3.5 h-3.5" /> 原版深色
+                    <Moon className="w-3.5 h-3.5" /> 深色
                   </button>
                 </div>
-                <p className="text-white/30 text-[9px] leading-tight">
-                  iOS 介面：高仿 iPhone 主畫面 + iMessage 訊息介面<br />
-                  原版深色：早期開發的 zinc 漸層深色風格
-                </p>
               </div>
 
-              {/* 主題切換（僅 iOS 介面有效） */}
-              {uiStyle === "ios" && (
-                <div className="space-y-1.5">
-                  <label className="text-white/50 text-[11px]">iOS 主題模式</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      onClick={() => setTheme("dark")}
-                      className={`flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs font-medium transition ${
-                        theme === "dark" ? "bg-blue-600 text-white" : "bg-zinc-800 text-white/60"
-                      }`}
-                    >
-                      <Moon className="w-3.5 h-3.5" /> 深色
-                    </button>
-                    <button
-                      onClick={() => setTheme("light")}
-                      className={`flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs font-medium transition ${
-                        theme === "light" ? "bg-blue-600 text-white" : "bg-zinc-800 text-white/60"
-                      }`}
-                    >
-                      <Sun className="w-3.5 h-3.5" /> 淺色
-                    </button>
-                  </div>
-                </div>
-              )}
-
               {/* 時間戳開關 */}
-              <div className="flex items-center justify-between p-2.5 rounded-lg bg-zinc-800">
+              <div
+                className="flex items-center justify-between p-2.5 rounded-lg"
+                style={{ background: "var(--im-input-bg)" }}
+              >
                 <div className="flex items-center gap-2">
                   <Clock className="w-3.5 h-3.5 text-amber-400" />
                   <div>
-                    <p className="text-white text-xs font-medium">顯示訊息時間戳</p>
-                    <p className="text-white/40 text-[10px]">在訊息上方顯示時間</p>
+                    <p className="text-xs font-medium" style={{ color: textMain }}>顯示訊息時間戳</p>
+                    <p className="text-[10px]" style={{ color: textSub }}>在訊息上方顯示時間</p>
                   </div>
                 </div>
                 <button
                   onClick={toggleTimestamps}
                   className={`w-10 h-6 rounded-full transition relative ${
-                    showTimestamps ? "bg-emerald-500" : "bg-zinc-600"
+                    showTimestamps ? "bg-emerald-500" : "bg-zinc-500"
                   }`}
                   aria-label="切換時間戳"
                 >
@@ -200,9 +197,9 @@ export function SettingsApp({ onBack }: SettingsAppProps) {
           </Section>
 
           {/* 玩家別名 */}
-          <Section icon={<User className="w-4 h-4" />} title="玩家身份">
+          <Section icon={<User className="w-4 h-4" />} title="玩家身份" cardBg={cardBg} cardBorder={cardBorder} textMain={textMain} textSub={textSub}>
             <div className="space-y-2">
-              <label className="text-white/50 text-[11px]">玩家別名（顯示在排行榜）</label>
+              <label className="text-[11px]" style={{ color: textSub }}>CC園區員工代號</label>
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -210,7 +207,12 @@ export function SettingsApp({ onBack }: SettingsAppProps) {
                   onChange={(e) => setAliasInput(e.target.value)}
                   placeholder="例如：DarkPhisher"
                   maxLength={20}
-                  className="flex-1 px-3 py-2 rounded-lg bg-zinc-800 border border-white/10 text-white text-sm placeholder:text-white/30 focus:outline-none focus:border-amber-500"
+                  className="flex-1 px-3 py-2 rounded-lg text-sm focus:outline-none focus:border-blue-500"
+                  style={{
+                    background: "var(--im-input-bg)",
+                    color: textMain,
+                    border: "1px solid var(--im-input-border)",
+                  }}
                 />
                 <button
                   onClick={saveAlias}
@@ -219,50 +221,65 @@ export function SettingsApp({ onBack }: SettingsAppProps) {
                   <Save className="w-3.5 h-3.5" /> 儲存
                 </button>
               </div>
-              <p className="text-white/30 text-[10px]">目前：{alias}</p>
+              <p className="text-[10px]" style={{ color: textSub }}>目前：{alias}</p>
             </div>
           </Section>
 
           {/* Agnes AI 設定 */}
-          <Section icon={<Key className="w-4 h-4" />} title="Agnes AI 設定">
+          <Section icon={<Key className="w-4 h-4" />} title="Agnes AI 設定" cardBg={cardBg} cardBorder={cardBorder} textMain={textMain} textSub={textSub}>
             <div className="space-y-3">
               <div className="space-y-1.5">
-                <label className="text-white/50 text-[11px]">API Key</label>
+                <label className="text-[11px]" style={{ color: textSub }}>API Key</label>
                 <input
                   type="password"
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
                   placeholder="sk-..."
-                  className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-white/10 text-white text-sm placeholder:text-white/30 focus:outline-none focus:border-emerald-500 font-mono"
+                  className="w-full px-3 py-2 rounded-lg text-sm font-mono focus:outline-none focus:border-emerald-500"
+                  style={{
+                    background: "var(--im-input-bg)",
+                    color: textMain,
+                    border: "1px solid var(--im-input-border)",
+                  }}
                 />
               </div>
               <div className="space-y-1.5">
-                <label className="text-white/50 text-[11px]">Base URL</label>
+                <label className="text-[11px]" style={{ color: textSub }}>Base URL</label>
                 <input
                   type="text"
                   value={baseUrl}
                   onChange={(e) => setBaseUrl(e.target.value)}
                   placeholder="https://apihub.agnes-ai.com/v1"
-                  className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-white/10 text-white text-sm placeholder:text-white/30 focus:outline-none focus:border-emerald-500 font-mono"
+                  className="w-full px-3 py-2 rounded-lg text-sm font-mono focus:outline-none focus:border-emerald-500"
+                  style={{
+                    background: "var(--im-input-bg)",
+                    color: textMain,
+                    border: "1px solid var(--im-input-border)",
+                  }}
                 />
               </div>
               <div className="space-y-1.5">
-                <label className="text-white/50 text-[11px]">Model 名稱</label>
+                <label className="text-[11px]" style={{ color: textSub }}>Model 名稱</label>
                 <input
                   type="text"
                   value={model}
                   onChange={(e) => setModel(e.target.value)}
                   placeholder="agnes-2.5-flash"
-                  className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-white/10 text-white text-sm placeholder:text-white/30 focus:outline-none focus:border-emerald-500 font-mono"
+                  className="w-full px-3 py-2 rounded-lg text-sm font-mono focus:outline-none focus:border-emerald-500"
+                  style={{
+                    background: "var(--im-input-bg)",
+                    color: textMain,
+                    border: "1px solid var(--im-input-border)",
+                  }}
                 />
               </div>
 
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <label className="text-white/50 text-[11px] flex items-center gap-1">
+                  <label className="text-[11px] flex items-center gap-1" style={{ color: textSub }}>
                     <Thermometer className="w-3 h-3" /> Temperature
                   </label>
-                  <span className="text-emerald-300 text-xs font-mono font-semibold">
+                  <span className="text-xs font-mono font-semibold text-emerald-400">
                     {temperature.toFixed(2)}
                   </span>
                 </div>
@@ -275,19 +292,22 @@ export function SettingsApp({ onBack }: SettingsAppProps) {
                   onChange={(e) => setTemperature(parseFloat(e.target.value))}
                   className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-emerald-500"
                 />
-                <div className="flex justify-between text-[9px] text-white/30">
+                <div className="flex justify-between text-[9px]" style={{ color: textSub }}>
                   <span>精確 (0.0)</span>
                   <span>平衡 (0.6)</span>
                   <span>創意 (2.0)</span>
                 </div>
-                <p className="text-white/40 text-[10px] leading-tight">
-                  預設 0.6：降低模型隨機發散，避免脑补玩家未提及的資訊
+                <p className="text-[10px] leading-tight" style={{ color: textSub }}>
+                  預設 0.6：降低模型隨機發散，避免脑补與重複
                 </p>
               </div>
 
-              <div className="rounded-lg bg-emerald-500/5 border border-emerald-500/15 p-2.5 flex items-start gap-2">
+              <div
+                className="rounded-lg p-2.5 flex items-start gap-2"
+                style={{ background: "rgba(16, 185, 129, 0.08)", border: "1px solid rgba(16, 185, 129, 0.2)" }}
+              >
                 <Wifi className="w-3 h-3 text-emerald-400 mt-0.5 shrink-0" />
-                <p className="text-emerald-300/70 text-[10px] leading-relaxed">
+                <p className="text-emerald-500/80 text-[10px] leading-relaxed">
                   App 已內嵌測試 API key，未填寫也能玩。填入自己的 key 可獲得更穩定的 AI 回應。
                 </p>
               </div>
@@ -302,35 +322,44 @@ export function SettingsApp({ onBack }: SettingsAppProps) {
           </Section>
 
           {/* 遊戲統計 */}
-          <Section icon={<Sparkles className="w-4 h-4" />} title="遊戲統計">
+          <Section icon={<Sparkles className="w-4 h-4" />} title="遊戲統計" cardBg={cardBg} cardBorder={cardBorder} textMain={textMain} textSub={textSub}>
             <div className="grid grid-cols-3 gap-2">
-              <Stat label="積分" value={`$${scamScore.toLocaleString()}`} color="text-amber-300" />
-              <Stat label="已解鎖" value={`${unlockedNpcIds.length} 人`} color="text-emerald-300" />
-              <Stat label="已加好友" value={`${friendNpcIds.length} 人`} color="text-blue-300" />
+              <Stat label="積分" value={`$${scamScore.toLocaleString()}`} color="text-amber-500" />
+              <Stat label="已解鎖" value={`${unlockedNpcIds.length}`} color="text-blue-500" />
+              <Stat label="已加好友" value={`${friendNpcIds.length}`} color="text-emerald-500" />
             </div>
           </Section>
 
-          {/* 重置遊戲 */}
-          <Section icon={<Trash2 className="w-4 h-4" />} title="危險區域">
+          {/* 危險區域 */}
+          <Section icon={<Trash2 className="w-4 h-4" />} title="危險區域" cardBg={cardBg} cardBorder={cardBorder} textMain={textMain} textSub={textSub}>
             {!confirmReset ? (
               <button
                 onClick={() => setConfirmReset(true)}
-                className="w-full py-2.5 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm font-medium hover:bg-red-500/20 active:scale-95 transition"
+                className="w-full py-2.5 rounded-lg text-sm font-medium active:scale-95 transition"
+                style={{
+                  background: "rgba(239, 68, 68, 0.1)",
+                  border: "1px solid rgba(239, 68, 68, 0.3)",
+                  color: "#ef4444",
+                }}
               >
                 重置所有遊戲進度
               </button>
             ) : (
               <div className="space-y-2">
-                <div className="rounded-lg bg-red-500/10 border border-red-500/30 p-2.5 flex items-start gap-2">
-                  <AlertTriangle className="w-3.5 h-3.5 text-red-400 mt-0.5 shrink-0" />
-                  <p className="text-red-300 text-[11px] leading-relaxed">
+                <div
+                  className="rounded-lg p-2.5 flex items-start gap-2"
+                  style={{ background: "rgba(239, 68, 68, 0.1)", border: "1px solid rgba(239, 68, 68, 0.3)" }}
+                >
+                  <AlertTriangle className="w-3.5 h-3.5 text-red-500 mt-0.5 shrink-0" />
+                  <p className="text-red-500 text-[11px] leading-relaxed">
                     此操作將清除所有積分、已解鎖情報、好友列表、對話記錄，且無法復原。確定繼續？
                   </p>
                 </div>
                 <div className="flex gap-2">
                   <button
                     onClick={() => setConfirmReset(false)}
-                    className="flex-1 py-2 rounded-lg bg-zinc-700 text-white text-xs font-medium hover:bg-zinc-600 active:scale-95 transition"
+                    className="flex-1 py-2 rounded-lg text-xs font-medium active:scale-95 transition"
+                    style={{ background: "var(--im-input-bg)", color: textMain }}
                   >
                     取消
                   </button>
@@ -346,16 +375,16 @@ export function SettingsApp({ onBack }: SettingsAppProps) {
           </Section>
 
           {/* 關於 */}
-          <Section icon={<Info className="w-4 h-4" />} title="關於">
-            <div className="space-y-2 text-xs text-white/70 leading-relaxed">
+          <Section icon={<Info className="w-4 h-4" />} title="關於" cardBg={cardBg} cardBorder={cardBorder} textMain={textMain} textSub={textSub}>
+            <div className="space-y-2 text-xs leading-relaxed" style={{ color: textMain }}>
               <p>
-                <span className="text-white font-semibold">SimOS</span> — 詐騙模擬器 v2.0 iMessage
+                <span className="font-semibold">SimOS</span> — 詐騙模擬器 v2.5 iMessage
               </p>
-              <p className="text-white/50">
-                一款沉浸式行動模擬遊戲，高仿 iOS iMessage 介面。玩家扮演詐騙者，透過文字誘導普通市民上當。
+              <p style={{ color: textSub }}>
+                一款沉浸式行動模擬遊戲，高仿 iOS iMessage 介面。玩家扮演 CC園區員工，透過文字誘導普通市民上當。
                 含隱藏信任度系統、多結局判定、動態警惕機制、圖片素材回覆、快捷话术庫。
               </p>
-              <div className="flex items-center gap-1.5 text-emerald-400 mt-2">
+              <div className="flex items-center gap-1.5 text-emerald-500 mt-2">
                 <Shield className="w-3 h-3" />
                 <span className="text-[10px]">本作純屬虛構，旨在提升防詐意識</span>
               </div>
@@ -363,7 +392,7 @@ export function SettingsApp({ onBack }: SettingsAppProps) {
                 href="https://github.com/artifexhongkong/simos-scam-simulator"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1.5 text-blue-400 hover:text-blue-300 text-[11px] mt-2"
+                className="flex items-center gap-1.5 text-blue-500 hover:text-blue-400 text-[11px] mt-2"
               >
                 <Github className="w-3.5 h-3.5" />
                 GitHub Repository
@@ -371,21 +400,40 @@ export function SettingsApp({ onBack }: SettingsAppProps) {
             </div>
           </Section>
 
-          <p className="text-white/25 text-[9px] text-center py-2">
+          <p className="text-[9px] text-center py-2" style={{ color: textSub }}>
             SimOS · 2026 · Anti-Scam Educational Simulation
           </p>
         </div>
       </div>
-    </AppContainer>
+    </div>
   );
 }
 
-function Section({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
+function Section({
+  icon,
+  title,
+  children,
+  cardBg,
+  cardBorder,
+  textMain,
+  textSub,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  children: React.ReactNode;
+  cardBg: string;
+  cardBorder: string;
+  textMain: string;
+  textSub: string;
+}) {
   return (
-    <div className="rounded-2xl bg-zinc-900/60 border border-white/5 p-4">
+    <div
+      className="rounded-2xl p-4"
+      style={{ background: cardBg, border: cardBorder }}
+    >
       <div className="flex items-center gap-2 mb-3">
-        <div className="text-amber-400">{icon}</div>
-        <h3 className="text-white text-sm font-semibold">{title}</h3>
+        <div className="text-amber-500">{icon}</div>
+        <h3 className="text-sm font-semibold" style={{ color: textMain }}>{title}</h3>
       </div>
       {children}
     </div>
@@ -394,8 +442,8 @@ function Section({ icon, title, children }: { icon: React.ReactNode; title: stri
 
 function Stat({ label, value, color }: { label: string; value: string; color: string }) {
   return (
-    <div className="rounded-lg bg-black/40 p-2.5 text-center">
-      <p className="text-white/40 text-[10px] mb-0.5">{label}</p>
+    <div className="rounded-lg p-2.5 text-center" style={{ background: "var(--im-input-bg)" }}>
+      <p className="text-[10px] mb-0.5" style={{ color: "var(--im-bubble-system-text)" }}>{label}</p>
       <p className={`text-sm font-bold ${color}`}>{value}</p>
     </div>
   );

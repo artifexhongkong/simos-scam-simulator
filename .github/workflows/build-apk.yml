@@ -105,15 +105,26 @@ jobs:
               protected void onCreate(Bundle savedInstanceState) {
                   super.onCreate(savedInstanceState);
 
-                  // Edge-to-edge 全螢幕 - 內容延伸到系統列下方
-                  // 搭配 CSS env(safe-area-inset-*) 處理邊界
-                  // 不使用 IMMERSIVE_STICKY（會讓 viewport 高度不斷變化）
+                  // Edge-to-edge：內容延伸到系統列下方
                   WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
 
+                  // 隱藏系統狀態列與導航列（沉浸式，參考 cultivation-world-zh）
                   WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
                   if (controller != null) {
-                      // 系統列可由滑動暫時顯示，但不會自動隱藏造成高度波動
-                      controller.setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_DEFAULT);
+                      controller.setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+                      controller.hide(WindowInsetsControllerCompat.Type.systemBars());
+                  }
+              }
+
+              @Override
+              public void onWindowFocusChanged(boolean hasFocus) {
+                  super.onWindowFocusChanged(hasFocus);
+                  // 重新取得焦點時再次隱藏系統列
+                  if (hasFocus) {
+                      WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
+                      if (controller != null) {
+                          controller.hide(WindowInsetsControllerCompat.Type.systemBars());
+                      }
                   }
               }
           }

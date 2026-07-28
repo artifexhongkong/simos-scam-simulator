@@ -124,9 +124,9 @@ export const useGameStore = create<GameState>()(
       playerId: genId(),
       playerAvatar: randomEmoji(),
       playerTelechatId: randomTelechatId(),
-      theme: "dark", // 預設深色（iOS 模擬介面用）
+      theme: "light", // 預設淺色模式
       showTimestamps: true, // 預設開啟時間戳
-      uiStyle: "ios", // 預設 iOS 模擬介面
+      uiStyle: "ios", // 預設 iOS 模擬介面（唯一選項）
       intelPoints: INITIAL_INTEL_POINTS,
       scamScore: 0,
       unlockedNpcIds: [],

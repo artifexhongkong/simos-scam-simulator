@@ -47,12 +47,14 @@ export function PhoneFrame({ children }: { children: React.ReactNode }) {
 /**
  * iOS 模擬介面 AppShell
  * - 含 iPhone 狀態欄（時間、訊號、Wi-Fi、電量）
- * - 內容區用 flex-1 + min-h-0 確保不超出視窗
- * - 整個 AppShell 填滿 PhoneFrame 內部（h-full）
+ * - 背景透明，由 children 自行決定背景色
  */
 export function AppShell({ children }: AppShellProps) {
   return (
-    <div className="relative h-full w-full flex flex-col text-white overflow-hidden bg-black">
+    <div
+      className="relative h-full w-full flex flex-col overflow-hidden"
+      style={{ background: "var(--im-bg)", color: "var(--im-header-text)" }}
+    >
       <PhoneStatusBar />
       <div className="flex-1 min-h-0 overflow-hidden">{children}</div>
     </div>
@@ -107,10 +109,10 @@ function PhoneStatusBar() {
   return (
     <div
       className="flex items-center justify-between px-6 pt-2 pb-1 text-[13px] font-semibold select-none z-40 relative shrink-0"
-      style={{ color: "var(--im-statusbar-text, #fff)", background: "transparent" }}
+      style={{ color: "var(--im-statusbar-text, #000)" }}
     >
       <span className="tracking-tight">{time}</span>
-      <div className="flex items-center gap-1.5">
+      <div className="flex items-center gap-1.5" style={{ color: "var(--im-statusbar-text, #000)" }}>
         <SignalIcon />
         <WifiIcon />
         <BatteryIcon level={battery} />
@@ -121,7 +123,7 @@ function PhoneStatusBar() {
 
 function SignalIcon() {
   return (
-    <svg width="16" height="11" viewBox="0 0 16 11" fill="currentColor" className="text-white">
+    <svg width="16" height="11" viewBox="0 0 16 11" fill="currentColor">
       <rect x="0" y="7" width="2.5" height="4" rx="0.5" />
       <rect x="4" y="5" width="2.5" height="6" rx="0.5" />
       <rect x="8" y="3" width="2.5" height="8" rx="0.5" />
@@ -132,7 +134,7 @@ function SignalIcon() {
 
 function WifiIcon() {
   return (
-    <svg width="15" height="11" viewBox="0 0 15 11" fill="currentColor" className="text-white">
+    <svg width="15" height="11" viewBox="0 0 15 11" fill="currentColor">
       <path d="M7.5 0C4.5 0 1.8 1.1 0 2.9l1.2 1.2c1.6-1.6 3.9-2.6 6.3-2.6s4.7 1 6.3 2.6L15 2.9C13.2 1.1 10.5 0 7.5 0z" />
       <path d="M7.5 3.7c-1.9 0-3.6.7-4.9 1.9l1.2 1.2c1-1 2.3-1.5 3.7-1.5s2.7.6 3.7 1.5l1.2-1.2c-1.3-1.2-3-1.9-4.9-1.9z" />
       <path d="M7.5 7.2c-.8 0-1.6.3-2.2.9l1.2 1.2c.3-.3.6-.4 1-.4s.7.1 1 .4l1.2-1.2c-.6-.6-1.4-.9-2.2-.9z" />
@@ -144,20 +146,20 @@ function WifiIcon() {
 function BatteryIcon({ level }: { level: number }) {
   const isLow = level < 20;
   const isCharging = level === 100;
-  const fillColor = isCharging ? "#34d399" : isLow ? "#f87171" : "#ffffff";
+  const fillColor = isCharging ? "#34d399" : isLow ? "#f87171" : "currentColor";
   const barWidth = Math.max(2, (level / 100) * 18);
 
   return (
     <div className="flex items-center gap-0.5">
-      <span className="text-[11px] font-medium text-white/90">{level}</span>
+      <span className="text-[11px] font-medium">{level}</span>
       <div className="relative flex items-center">
-        <div className="w-[22px] h-[11px] border border-white/80 rounded-[3px] p-[1px] flex items-center">
+        <div className="w-[22px] h-[11px] border rounded-[3px] p-[1px] flex items-center" style={{ borderColor: "currentColor", opacity: 0.8 }}>
           <div
             className="h-full rounded-[1px] transition-all"
             style={{ width: `${barWidth}px`, backgroundColor: fillColor }}
           />
         </div>
-        <div className="w-[1.5px] h-[4px] bg-white/80 rounded-r-sm ml-[0.5px]" />
+        <div className="w-[1.5px] h-[4px] rounded-r-sm ml-[0.5px]" style={{ background: "currentColor", opacity: 0.8 }} />
       </div>
     </div>
   );

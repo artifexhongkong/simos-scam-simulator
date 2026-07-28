@@ -53,6 +53,7 @@ jobs:
 
       - name: Build Next.js static export
         run: |
+          # Backup and swap config for static export
           cp next.config.ts next.config.ts.bak
           cat > next.config.ts <<'EOF'
           import type { NextConfig } from "next";
@@ -60,13 +61,18 @@ jobs:
             output: "export",
             images: { unoptimized: true },
             typescript: { ignoreBuildErrors: true },
-            eslint: { ignoreDuringBuilds: true },
             reactStrictMode: false,
             trailingSlash: true,
           };
           export default nextConfig;
           EOF
-          bun run build || npx next build
+          # Capacitor APK doesn't need API routes - they break static export.
+          # The client-side Agnes engine (src/lib/agnes/engine.ts) auto-detects
+          # Capacitor env and uses rule engine instead of /api/agnes.
+          rm -rf src/app/api
+          # Build (use npx next build directly - package.json build script targets standalone, not export)
+          npx next build
+          # Restore config
           rm -f next.config.ts
           mv next.config.ts.bak next.config.ts
 

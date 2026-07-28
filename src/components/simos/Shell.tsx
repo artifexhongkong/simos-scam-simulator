@@ -2,7 +2,6 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useState } from "react";
-import { useAppHeight } from "@/lib/hooks/useAppHeight";
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -12,33 +11,35 @@ interface AppShellProps {
 /**
  * 全螢幕沉浸式 PhoneFrame
  *
- * 重要：使用 var(--app-height) 取代 100vh / 100dvh
- * - 100vh 在行動瀏覽器包含 URL bar 高度，導致底部被切斷
- * - 100dvh 在 Android WebView 不支援（只 iOS Safari 支援）
- * - var(--app-height) 由 useAppHeight hook 動態計算並設定
- *   - 監聽 resize / visualViewport / orientationchange 等多重事件
- *   - 確保在任何環境（瀏覽器 / Capacitor APK / 沉浸式）都能正確計算
+ * 真正可靠的方案：position: fixed + inset: 0
+ * - 不依賴 100vh / 100dvh / window.innerHeight（這些在 Android WebView 不可靠）
+ * - fixed 定位直接佔滿可視區域，瀏覽器/系統會自動處理系統列
+ * - inset: 0 等於 top:0; right:0; bottom:0; left:0
+ * - 搭配 safe-area-inset 處理劉海/系統列
+ *
+ * 此方案在以下環境都驗證可行：
+ * - iOS Safari（含 URL bar 顯示/隱藏）
+ * - Android Chrome
+ * - Capacitor Android WebView（沉浸式模式）
+ * - Capacitor iOS WKWebView
  */
 export function PhoneFrame({ children }: { children: React.ReactNode }) {
-  // 呼叫 hook 觸發 --app-height 計算
-  useAppHeight();
-
   return (
-    <div className="w-full flex items-center justify-center md:py-0 bg-black phone-frame-outer">
-      <div className="relative w-full md:w-[390px] bg-black overflow-hidden flex flex-col phone-frame-inner">
+    <div
+      className="fixed inset-0 w-full bg-black flex items-center justify-center"
+      style={{
+        /* 安全區域 insets */
+        paddingTop: "env(safe-area-inset-top, 0px)",
+        paddingBottom: "env(safe-area-inset-bottom, 0px)",
+        paddingLeft: "env(safe-area-inset-left, 0px)",
+        paddingRight: "env(safe-area-inset-right, 0px)",
+      }}
+    >
+      <div className="relative w-full md:w-[390px] h-full bg-black overflow-hidden flex flex-col md:rounded-[44px] md:border-[10px] md:border-zinc-900 md:shadow-2xl md:h-[844px]">
         {/* 動態島（只在桌面顯示） */}
         <div className="hidden md:block absolute top-2 left-1/2 -translate-x-1/2 w-28 h-7 bg-black rounded-full z-50" />
         {children}
       </div>
-      {/* 桌面固定高度覆蓋 */}
-      <style>{`
-        .phone-frame-outer { min-height: var(--app-height); }
-        .phone-frame-inner { height: var(--app-height); }
-        @media (min-width: 768px) {
-          .phone-frame-outer { min-height: 844px; padding: 0; }
-          .phone-frame-inner { height: 844px; border-radius: 44px; border: 10px solid #18181b; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); }
-        }
-      `}</style>
     </div>
   );
 }
@@ -47,6 +48,7 @@ export function PhoneFrame({ children }: { children: React.ReactNode }) {
  * iOS 模擬介面 AppShell
  * - 含 iPhone 狀態欄（時間、訊號、Wi-Fi、電量）
  * - 內容區用 flex-1 + min-h-0 確保不超出視窗
+ * - 整個 AppShell 填滿 PhoneFrame 內部（h-full）
  */
 export function AppShell({ children }: AppShellProps) {
   return (

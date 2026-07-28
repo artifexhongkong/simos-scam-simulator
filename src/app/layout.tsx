@@ -43,7 +43,6 @@ export default function RootLayout({
   return (
     <html lang="zh-Hant" suppressHydrationWarning>
       <head>
-        {/* PWA / 行動裝置全螢幕 meta tags */}
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -51,13 +50,6 @@ export default function RootLayout({
       </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-black text-white overscroll-none`}
-        style={{
-          // safe-area insets for notched devices
-          paddingTop: "env(safe-area-inset-top, 0px)",
-          paddingBottom: "env(safe-area-inset-bottom, 0px)",
-          paddingLeft: "env(safe-area-inset-left, 0px)",
-          paddingRight: "env(safe-area-inset-right, 0px)",
-        }}
       >
         {children}
         <Toaster />

@@ -49,7 +49,7 @@ jobs:
         run: bun install --frozen-lockfile || bun install
 
       - name: Install Capacitor packages
-        run: bun add -D @capacitor/cli @capacitor/core @capacitor/android @capacitor/status-bar @capacitor/splash-screen @capacitor/navigation-bar
+        run: bun add -D @capacitor/cli @capacitor/core @capacitor/android @capacitor/status-bar @capacitor/splash-screen
 
       - name: Build Next.js static export
         run: |

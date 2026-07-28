@@ -22,7 +22,8 @@ export function SimOS() {
   // Client 端 hydration
   useEffect(() => {
     useGameStore.persist.rehydrate();
-    setHydrated(true);
+    // 用 microtask 避免在 effect 同步呼叫 setState
+    Promise.resolve().then(() => setHydrated(true));
   }, []);
 
   // 全螢幕沉浸式：嘗試隱藏瀏覽器/系統的 URL bar 與 status bar

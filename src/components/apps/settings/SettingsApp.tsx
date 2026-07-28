@@ -42,9 +42,12 @@ export function SettingsApp({ onBack }: SettingsAppProps) {
     const k = window.localStorage.getItem("simos_agnes_api_key");
     const u = window.localStorage.getItem("simos_agnes_base_url");
     const m = window.localStorage.getItem("simos_agnes_model");
-    if (k) setApiKey(k);
-    if (u) setBaseUrl(u);
-    if (m) setModel(m);
+    // 用 microtask 避免在 effect 同步呼叫 setState
+    Promise.resolve().then(() => {
+      if (k) setApiKey(k);
+      if (u) setBaseUrl(u);
+      if (m) setModel(m);
+    });
   }, []);
 
   const flashSaved = () => {

@@ -305,12 +305,12 @@ export function ChatWindow({ npc, onBack }: { npc: NpcProfile; onBack: () => voi
 
   return (
     <div
-      className="h-full flex flex-col relative"
+      className="h-full min-h-0 flex flex-col relative overflow-hidden"
       style={{ background: "var(--im-bg)" }}
     >
       {/* iOS iMessage 頂部導航欄 */}
       <div
-        className="flex items-center px-2 py-2 border-b backdrop-blur-xl z-20"
+        className="flex items-center px-2 py-2 border-b backdrop-blur-xl z-20 shrink-0"
         style={{
           background: "var(--im-header-bg)",
           borderColor: "var(--im-header-border)",
@@ -398,7 +398,7 @@ export function ChatWindow({ npc, onBack }: { npc: NpcProfile; onBack: () => voi
       </AnimatePresence>
 
       {/* 訊息列表 - iMessage 風格 */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 py-3 space-y-0.5">
+      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto px-3 py-3 space-y-0.5">
         {conv.messages.map((msg, idx) => (
           <MessageBubble
             key={msg.id}
@@ -453,7 +453,7 @@ export function ChatWindow({ npc, onBack }: { npc: NpcProfile; onBack: () => voi
       {/* iOS iMessage 輸入區 */}
       {!isLocked && (
         <div
-          className="px-2 py-2 border-t backdrop-blur-xl"
+          className="px-2 py-2 border-t backdrop-blur-xl shrink-0"
           style={{
             background: "var(--im-header-bg)",
             borderColor: "var(--im-header-border)",

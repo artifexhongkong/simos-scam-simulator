@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { PhoneFrame, AppShell } from "./Shell";
+import { PhoneFrame, AppShell, ClassicAppShell } from "./Shell";
 import { HomeScreen } from "./HomeScreen";
 import { TeleChatApp } from "@/components/apps/telechat/TeleChatApp";
 import { InfoBrokerApp } from "@/components/apps/broker/InfoBrokerApp";
@@ -19,6 +19,7 @@ export function SimOS() {
   const intelPoints = useGameStore((s) => s.intelPoints);
   const scamScore = useGameStore((s) => s.scamScore);
   const theme = useGameStore((s) => s.theme);
+  const uiStyle = useGameStore((s) => s.uiStyle);
 
   useEffect(() => {
     useGameStore.persist.rehydrate();
@@ -55,9 +56,13 @@ export function SimOS() {
     );
   }
 
+  // iOS 模擬介面：用 AppShell（含狀態欄）
+  // 原版深色風格：用 ClassicAppShell（無狀態欄，原本 zinc 漸層背景）
+  const Shell = uiStyle === "ios" ? AppShell : ClassicAppShell;
+
   return (
     <PhoneFrame>
-      <AppShell>
+      <Shell>
         {activeApp === "home" && (
           <HomeScreen onOpenApp={setActiveApp} intelPoints={intelPoints} scamScore={scamScore} />
         )}
@@ -65,8 +70,10 @@ export function SimOS() {
         {activeApp === "broker" && <InfoBrokerApp onBack={() => setActiveApp("home")} />}
         {activeApp === "leaderboard" && <LeaderboardApp onBack={() => setActiveApp("home")} />}
         {activeApp === "settings" && <SettingsApp onBack={() => setActiveApp("home")} />}
-      </AppShell>
-      <div className="absolute bottom-1.5 left-1/2 -translate-x-1/2 w-32 h-1 bg-white/40 rounded-full" />
+      </Shell>
+      {uiStyle === "ios" && (
+        <div className="absolute bottom-1.5 left-1/2 -translate-x-1/2 w-32 h-1 bg-white/40 rounded-full z-50 pointer-events-none" />
+      )}
     </PhoneFrame>
   );
 }

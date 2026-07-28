@@ -36,11 +36,9 @@ export function TeleChatApp({ onBack }: { onBack: () => void }) {
       setMode("list");
       return null;
     }
-    return (
-      <AppContainer title={npc.displayName} onBack={() => setMode("list")} headerColor="bg-zinc-900">
-        <ChatWindow npc={npc} />
-      </AppContainer>
-    );
+    // ChatWindow 自帶 iOS iMessage 頂部欄（頭像+姓名+返回），不需再用 AppContainer 包裹
+    // 否則會造成雙重頂部欄
+    return <ChatWindow npc={npc} onBack={() => setMode("list")} />;
   }
 
   if (mode === "add") {

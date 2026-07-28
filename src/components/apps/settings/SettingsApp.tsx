@@ -18,6 +18,8 @@ import {
   Moon,
   Clock,
   Palette,
+  Smartphone,
+  Layers,
 } from "lucide-react";
 import { AppContainer } from "@/components/simos/Shell";
 import { useGameStore } from "@/lib/game/store";
@@ -39,6 +41,8 @@ export function SettingsApp({ onBack }: SettingsAppProps) {
   const setTheme = useGameStore((s) => s.setTheme);
   const showTimestamps = useGameStore((s) => s.showTimestamps);
   const toggleTimestamps = useGameStore((s) => s.toggleTimestamps);
+  const uiStyle = useGameStore((s) => s.uiStyle);
+  const setUiStyle = useGameStore((s) => s.setUiStyle);
 
   const [aliasInput, setAliasInput] = useState(alias === "Anonymous" ? "" : alias);
   const [apiKey, setApiKey] = useState("");
@@ -114,32 +118,59 @@ export function SettingsApp({ onBack }: SettingsAppProps) {
           {/* 介面外觀 */}
           <Section icon={<Palette className="w-4 h-4" />} title="介面外觀">
             <div className="space-y-3">
-              {/* 主題切換 */}
+              {/* 介面風格切換：原版深色 / iOS 模擬介面 */}
               <div className="space-y-1.5">
-                <label className="text-white/50 text-[11px]">iMessage 主題模式</label>
+                <label className="text-white/50 text-[11px] flex items-center gap-1">
+                  <Layers className="w-3 h-3" /> 介面風格
+                </label>
                 <div className="grid grid-cols-2 gap-2">
                   <button
-                    onClick={() => setTheme("dark")}
+                    onClick={() => setUiStyle("ios")}
                     className={`flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs font-medium transition ${
-                      theme === "dark"
-                        ? "bg-blue-600 text-white"
-                        : "bg-zinc-800 text-white/60"
+                      uiStyle === "ios" ? "bg-blue-600 text-white" : "bg-zinc-800 text-white/60"
                     }`}
                   >
-                    <Moon className="w-3.5 h-3.5" /> 深色
+                    <Smartphone className="w-3.5 h-3.5" /> iOS 介面
                   </button>
                   <button
-                    onClick={() => setTheme("light")}
+                    onClick={() => setUiStyle("classic")}
                     className={`flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs font-medium transition ${
-                      theme === "light"
-                        ? "bg-blue-600 text-white"
-                        : "bg-zinc-800 text-white/60"
+                      uiStyle === "classic" ? "bg-blue-600 text-white" : "bg-zinc-800 text-white/60"
                     }`}
                   >
-                    <Sun className="w-3.5 h-3.5" /> 淺色
+                    <Layers className="w-3.5 h-3.5" /> 原版深色
                   </button>
                 </div>
+                <p className="text-white/30 text-[9px] leading-tight">
+                  iOS 介面：高仿 iPhone 主畫面 + iMessage 訊息介面<br />
+                  原版深色：早期開發的 zinc 漸層深色風格
+                </p>
               </div>
+
+              {/* 主題切換（僅 iOS 介面有效） */}
+              {uiStyle === "ios" && (
+                <div className="space-y-1.5">
+                  <label className="text-white/50 text-[11px]">iOS 主題模式</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => setTheme("dark")}
+                      className={`flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs font-medium transition ${
+                        theme === "dark" ? "bg-blue-600 text-white" : "bg-zinc-800 text-white/60"
+                      }`}
+                    >
+                      <Moon className="w-3.5 h-3.5" /> 深色
+                    </button>
+                    <button
+                      onClick={() => setTheme("light")}
+                      className={`flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs font-medium transition ${
+                        theme === "light" ? "bg-blue-600 text-white" : "bg-zinc-800 text-white/60"
+                      }`}
+                    >
+                      <Sun className="w-3.5 h-3.5" /> 淺色
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* 時間戳開關 */}
               <div className="flex items-center justify-between p-2.5 rounded-lg bg-zinc-800">

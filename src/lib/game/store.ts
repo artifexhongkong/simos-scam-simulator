@@ -37,8 +37,9 @@ export interface GameState {
   playerTelechatId: string; // 玩家自己的 TeleChat ID
 
   // UI 偏好設定
-  theme: "dark" | "light"; // iMessage 主題
+  theme: "dark" | "light"; // iMessage 主題（iOS 模擬介面用）
   showTimestamps: boolean; // 是否顯示訊息時間戳
+  uiStyle: "classic" | "ios"; // 介面風格：原版深色 / iOS 模擬介面
 
   // 經濟系統：情報點數（用於購買情報，非遊戲主目標）
   intelPoints: number;
@@ -63,6 +64,7 @@ export interface GameState {
   setAlias: (alias: string) => void;
   setTheme: (theme: "dark" | "light") => void;
   toggleTimestamps: () => void;
+  setUiStyle: (style: "classic" | "ios") => void;
   addIntelPoints: (n: number) => void;
   purchaseIntel: (npcId: string) => boolean;
   addFriend: (telechatId: string) => { ok: boolean; error?: string; npcId?: string };
@@ -122,8 +124,9 @@ export const useGameStore = create<GameState>()(
       playerId: genId(),
       playerAvatar: randomEmoji(),
       playerTelechatId: randomTelechatId(),
-      theme: "dark", // 預設深色（保留原本深色介面）
-      showTimestamps: false,
+      theme: "dark", // 預設深色（iOS 模擬介面用）
+      showTimestamps: true, // 預設開啟時間戳
+      uiStyle: "ios", // 預設 iOS 模擬介面
       intelPoints: INITIAL_INTEL_POINTS,
       scamScore: 0,
       unlockedNpcIds: [],
@@ -136,6 +139,7 @@ export const useGameStore = create<GameState>()(
 
       setTheme: (theme) => set({ theme }),
       toggleTimestamps: () => set((s) => ({ showTimestamps: !s.showTimestamps })),
+      setUiStyle: (uiStyle) => set({ uiStyle }),
 
       addIntelPoints: (n) => set((s) => ({ intelPoints: Math.max(0, s.intelPoints + n) })),
 

@@ -26,7 +26,24 @@ export function PhoneFrame({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function AppShell({ children, wallpaper = "tech" }: AppShellProps) {
+/**
+ * iOS 模擬介面 AppShell
+ * - 含 iPhone 狀態欄（時間、訊號、Wi-Fi、電量）
+ * - 內容區用 flex-1 + min-h-0 確保不超出視窗
+ */
+export function AppShell({ children }: AppShellProps) {
+  return (
+    <div className="relative h-full w-full flex flex-col text-white overflow-hidden bg-black">
+      <PhoneStatusBar />
+      <div className="flex-1 min-h-0 overflow-hidden">{children}</div>
+    </div>
+  );
+}
+
+/**
+ * 原版深色風格 AppShell（無 iOS 狀態欄，保留 zinc 漸層背景）
+ */
+export function ClassicAppShell({ children, wallpaper = "tech" }: AppShellProps) {
   const bg =
     wallpaper === "tech"
       ? "bg-gradient-to-b from-zinc-900 via-zinc-950 to-black"
@@ -34,9 +51,7 @@ export function AppShell({ children, wallpaper = "tech" }: AppShellProps) {
 
   return (
     <div className={`relative h-full w-full ${bg} flex flex-col text-white overflow-hidden`}>
-      {/* 模擬手機狀態欄（時間、訊號、電量）- 像真實手機一樣顯示 */}
-      <PhoneStatusBar />
-      <div className="flex-1 overflow-hidden">{children}</div>
+      <div className="flex-1 min-h-0 overflow-hidden">{children}</div>
     </div>
   );
 }
@@ -63,7 +78,6 @@ function PhoneStatusBar() {
     return () => clearInterval(id);
   }, []);
 
-  // 電量每 5 分鐘下降 1%（純視覺效果）
   useEffect(() => {
     const id = setInterval(() => {
       setBattery((b) => (b > 20 ? b - 1 : 100));
@@ -72,14 +86,14 @@ function PhoneStatusBar() {
   }, []);
 
   return (
-    <div className="flex items-center justify-between px-6 pt-2 pb-1 text-white text-[13px] font-semibold select-none z-40 relative">
+    <div
+      className="flex items-center justify-between px-6 pt-2 pb-1 text-[13px] font-semibold select-none z-40 relative shrink-0"
+      style={{ color: "var(--im-statusbar-text, #fff)", background: "transparent" }}
+    >
       <span className="tracking-tight">{time}</span>
       <div className="flex items-center gap-1.5">
-        {/* 訊號強度 */}
         <SignalIcon />
-        {/* Wi-Fi */}
         <WifiIcon />
-        {/* 電量 */}
         <BatteryIcon level={battery} />
       </div>
     </div>
@@ -112,8 +126,6 @@ function BatteryIcon({ level }: { level: number }) {
   const isLow = level < 20;
   const isCharging = level === 100;
   const fillColor = isCharging ? "#34d399" : isLow ? "#f87171" : "#ffffff";
-
-  // 電量條寬度（電池內部）
   const barWidth = Math.max(2, (level / 100) * 18);
 
   return (
@@ -146,9 +158,9 @@ export function AppContainer({ title, onBack, children, headerColor = "bg-zinc-9
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.95 }}
       transition={{ duration: 0.2 }}
-      className="h-full flex flex-col"
+      className="h-full min-h-0 flex flex-col"
     >
-      <div className={`${headerColor} px-4 pt-1 pb-3 flex items-center gap-3 border-b border-white/5`}>
+      <div className={`${headerColor} px-4 pt-1 pb-3 flex items-center gap-3 border-b border-white/5 shrink-0`}>
         <button
           onClick={onBack}
           className="text-blue-400 text-sm hover:text-blue-300 active:scale-95 transition"
@@ -158,7 +170,7 @@ export function AppContainer({ title, onBack, children, headerColor = "bg-zinc-9
         </button>
         <h2 className="text-white text-base font-semibold flex-1 text-center pr-8 truncate">{title}</h2>
       </div>
-      <div className="flex-1 overflow-hidden">{children}</div>
+      <div className="flex-1 min-h-0 overflow-hidden">{children}</div>
     </motion.div>
   );
 }

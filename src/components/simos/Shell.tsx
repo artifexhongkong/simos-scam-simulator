@@ -1,47 +1,24 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Wifi, BatteryFull, Signal } from "lucide-react";
-
-export function StatusBar() {
-  const [time, setTime] = useState("");
-
-  useEffect(() => {
-    const update = () => {
-      const d = new Date();
-      const h = d.getHours().toString().padStart(2, "0");
-      const m = d.getMinutes().toString().padStart(2, "0");
-      setTime(`${h}:${m}`);
-    };
-    update();
-    const id = setInterval(update, 30000);
-    return () => clearInterval(id);
-  }, []);
-
-  return (
-    <div className="flex items-center justify-between px-6 pt-3 pb-1 text-white text-sm font-medium select-none">
-      <span className="tracking-tight">{time}</span>
-      <div className="flex items-center gap-1.5">
-        <Signal className="w-3.5 h-3.5" />
-        <Wifi className="w-3.5 h-3.5" />
-        <BatteryFull className="w-4 h-4" />
-      </div>
-    </div>
-  );
-}
 
 interface AppShellProps {
   children: React.ReactNode;
   wallpaper?: "dark" | "tech";
 }
 
+/**
+ * 全螢幕沉浸式 PhoneFrame
+ * - 在網頁端：模擬手機外框，但內容填滿整個視窗
+ * - 在 Capacitor APK：因 MainActivity 啟用 immersive sticky 模式，
+ *   Android 系統狀態欄與導航欄會自動隱藏，由 App 完全佔用螢幕
+ */
 export function PhoneFrame({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen w-full bg-zinc-950 flex items-center justify-center md:py-6">
-      {/* 手機外框（在桌面上顯示邊框） */}
-      <div className="relative w-full md:w-[390px] md:h-[844px] h-screen bg-black md:rounded-[44px] md:border-[10px] md:border-zinc-900 md:shadow-2xl overflow-hidden">
-        {/* 動態島 */}
+    <div className="min-h-screen w-full bg-black flex items-center justify-center md:py-0">
+      {/* 手機外框（在桌面上顯示邊框，行動裝置則全螢幕） */}
+      <div className="relative w-full md:w-[390px] md:h-[844px] h-screen min-h-screen bg-black md:rounded-[44px] md:border-[10px] md:border-zinc-900 md:shadow-2xl overflow-hidden">
+        {/* 動態島（只在桌面顯示） */}
         <div className="hidden md:block absolute top-2 left-1/2 -translate-x-1/2 w-28 h-7 bg-black rounded-full z-50" />
         {children}
       </div>
@@ -57,7 +34,7 @@ export function AppShell({ children, wallpaper = "tech" }: AppShellProps) {
 
   return (
     <div className={`relative h-full w-full ${bg} flex flex-col text-white overflow-hidden`}>
-      <StatusBar />
+      {/* 不再顯示自製狀態欄 - 讓遊戲完全沉浸式 */}
       <div className="flex-1 overflow-hidden">{children}</div>
     </div>
   );
@@ -91,5 +68,13 @@ export function AppContainer({ title, onBack, children, headerColor = "bg-zinc-9
       </div>
       <div className="flex-1 overflow-hidden">{children}</div>
     </motion.div>
+  );
+}
+
+export function AnimateApp({ show, children }: { show: boolean; children: React.ReactNode }) {
+  return (
+    <AnimatePresence mode="wait">
+      {show && <motion.div className="h-full w-full absolute inset-0 z-30">{children}</motion.div>}
+    </AnimatePresence>
   );
 }

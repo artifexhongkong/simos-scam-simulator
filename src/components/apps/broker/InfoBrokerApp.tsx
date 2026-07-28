@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Lock, Sparkles, CheckCircle2, Eye, Skull, Fingerprint } from "lucide-react";
+import { Lock, Sparkles, CheckCircle2, Eye, Skull, Fingerprint, Copy, Check } from "lucide-react";
 import { AppContainer } from "@/components/simos/Shell";
 import { useGameStore } from "@/lib/game/store";
 import { NPCS, type NpcProfile } from "@/lib/game/npcs";
@@ -168,6 +168,31 @@ function TargetCard({
 }
 
 function IntelDetailModal({ npc, onClose }: { npc: NpcProfile; onClose: () => void }) {
+  const [copied, setCopied] = useState(false);
+
+  const copyId = async () => {
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(npc.telechatId);
+      } else {
+        // Fallback for older browsers / non-secure context (Capacitor)
+        const ta = document.createElement("textarea");
+        ta.value = npc.telechatId;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch (e) {
+      console.error("copy failed", e);
+    }
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -199,12 +224,30 @@ function IntelDetailModal({ npc, onClose }: { npc: NpcProfile; onClose: () => vo
 
         {/* Body */}
         <div className="p-5 space-y-4 overflow-y-auto">
-          {/* ID */}
+          {/* ID with copy button */}
           <div className="rounded-xl bg-black/40 border border-white/5 p-3">
-            <p className="text-white/40 text-[10px] font-medium uppercase tracking-wide mb-1">TeleChat ID</p>
-            <div className="flex items-center justify-between">
-              <code className="text-emerald-300 text-sm font-mono">{npc.telechatId}</code>
-              <span className="text-[10px] text-white/40">用於加好友</span>
+            <p className="text-white/40 text-[10px] font-medium uppercase tracking-wide mb-1.5">TeleChat ID（用於加好友）</p>
+            <div className="flex items-center justify-between gap-2">
+              <code className="text-emerald-300 text-sm font-mono break-all flex-1">{npc.telechatId}</code>
+              <button
+                onClick={copyId}
+                className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition active:scale-95 flex items-center gap-1.5 ${
+                  copied
+                    ? "bg-emerald-500 text-white"
+                    : "bg-zinc-700 text-white hover:bg-zinc-600"
+                }`}
+                aria-label="複製 ID"
+              >
+                {copied ? (
+                  <>
+                    <Check className="w-3.5 h-3.5" /> 已複製
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5" /> 複製
+                  </>
+                )}
+              </button>
             </div>
           </div>
 

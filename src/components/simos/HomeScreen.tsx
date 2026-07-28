@@ -1,10 +1,9 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { MessageCircle, Skull, Trophy, Sparkles } from "lucide-react";
+import { MessageCircle, Skull, Trophy, Sparkles, Settings as SettingsIcon } from "lucide-react";
 import type { AppName } from "./SimOS";
 import { useGameStore } from "@/lib/game/store";
-import { useShallow } from "zustand/react/shallow";
 
 interface HomeScreenProps {
   onOpenApp: (app: AppName) => void;
@@ -24,7 +23,7 @@ interface AppTile {
 export function HomeScreen({ onOpenApp, intelPoints, scamScore }: HomeScreenProps) {
   const conversations = useGameStore((s) => s.conversations);
 
-  // 計算有新訊息的好友數（簡化：所有進行中對話都標記）
+  // 計算進行中的對話數
   const activeConvCount = Object.values(conversations).filter((c) => c.status === "active").length;
 
   const apps: AppTile[] = [
@@ -50,10 +49,17 @@ export function HomeScreen({ onOpenApp, intelPoints, scamScore }: HomeScreenProp
       icon: <Trophy className="w-7 h-7 text-white" strokeWidth={2.2} />,
       bg: "bg-gradient-to-br from-amber-500 to-yellow-700",
     },
+    {
+      key: "settings",
+      label: "設定",
+      description: "玩家選項",
+      icon: <SettingsIcon className="w-7 h-7 text-white" strokeWidth={2.2} />,
+      bg: "bg-gradient-to-br from-slate-600 to-slate-800",
+    },
   ];
 
   return (
-    <div className="h-full flex flex-col px-6 pt-4 pb-8 overflow-y-auto">
+    <div className="h-full flex flex-col px-6 pt-6 pb-8 overflow-y-auto">
       {/* 上方玩家資訊 */}
       <motion.div
         initial={{ opacity: 0, y: -10 }}
@@ -78,7 +84,7 @@ export function HomeScreen({ onOpenApp, intelPoints, scamScore }: HomeScreenProp
         </div>
       </motion.div>
 
-      {/* App 圖示網格 */}
+      {/* App 圖示網格 - 4 個 app 用 2x2 */}
       <div className="grid grid-cols-3 gap-x-4 gap-y-7 flex-1">
         {apps.map((app, i) => (
           <motion.button
@@ -90,7 +96,9 @@ export function HomeScreen({ onOpenApp, intelPoints, scamScore }: HomeScreenProp
             onClick={() => onOpenApp(app.key)}
             className="flex flex-col items-center gap-1.5"
           >
-            <div className={`relative w-[68px] h-[68px] rounded-2xl ${app.bg} shadow-lg flex items-center justify-center border border-white/10`}>
+            <div
+              className={`relative w-[68px] h-[68px] rounded-2xl ${app.bg} shadow-lg flex items-center justify-center border border-white/10`}
+            >
               {app.icon}
               {app.badge && (
                 <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-zinc-900">
@@ -106,7 +114,7 @@ export function HomeScreen({ onOpenApp, intelPoints, scamScore }: HomeScreenProp
         ))}
       </div>
 
-      {/* 底部 Dock */}
+      {/* 底部 Dock - 包含設定 */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -134,6 +142,13 @@ export function HomeScreen({ onOpenApp, intelPoints, scamScore }: HomeScreenProp
             aria-label="業績排行榜"
           >
             <Trophy className="w-6 h-6 text-white" />
+          </button>
+          <button
+            onClick={() => onOpenApp("settings")}
+            className="w-12 h-12 rounded-2xl bg-gradient-to-br from-slate-600 to-slate-800 flex items-center justify-center active:scale-95 transition border border-white/10"
+            aria-label="設定"
+          >
+            <SettingsIcon className="w-6 h-6 text-white" />
           </button>
         </div>
       </motion.div>

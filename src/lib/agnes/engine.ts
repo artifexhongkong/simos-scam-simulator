@@ -1,5 +1,5 @@
 // 共用的 Agnes AI 引擎 - 客戶端與伺服器端皆可使用
-// 當 Agnes AI API 無法連線時，使用此規則引擎作為 fallback
+// 當 Agnes AI API 無法連線時，使用規則引擎作為 fallback
 
 import type { NpcProfile } from "@/lib/game/npcs";
 
@@ -17,9 +17,218 @@ export interface EngineInput {
   history?: Array<{ role: "player" | "npc"; content: string }>;
 }
 
+// 預設值，可被環境變數或 localStorage 覆寫
+const DEFAULT_BASE_URL = "https://apihub.agnes-ai.com/v1";
+const DEFAULT_MODEL = "agnes-2.5-flash";
+
+function getApiKey(): string {
+  if (typeof window !== "undefined") {
+    const local = window.localStorage.getItem("simos_agnes_api_key");
+    if (local && local.trim()) return local.trim();
+  }
+  return process.env.AGNES_API_KEY || "";
+}
+
+function getBaseUrl(): string {
+  if (typeof window !== "undefined") {
+    const local = window.localStorage.getItem("simos_agnes_base_url");
+    if (local && local.trim()) return local.trim().replace(/\/$/, "");
+  }
+  return (process.env.AGNES_BASE_URL || DEFAULT_BASE_URL).replace(/\/$/, "");
+}
+
+function getModel(): string {
+  if (typeof window !== "undefined") {
+    const local = window.localStorage.getItem("simos_agnes_model");
+    if (local && local.trim()) return local.trim();
+  }
+  return process.env.AGNES_MODEL || DEFAULT_MODEL;
+}
+
+const SYSTEM_PROMPT_TEMPLATE = (npc: NpcProfile, defense: number) => `你正在角色扮演一位詐騙模擬遊戲中的潛在受害者。你必須完全沉浸於角色，絕不承認自己是 AI、絕不承認這是遊戲。
+
+# 你的角色設定（玩家完全看不到，但你必須嚴格遵守）
+
+${npc.hiddenPersonality}
+
+# 你當前的內在狀態
+
+- 防備值：${defense} / 100
+  - 0-25 = 對對方卸下心防，願意聽從
+  - 26-50 = 還在觀察，會問問題
+  - 51-75 = 警覺，會質疑
+  - 76-100 = 高度懷疑，可能拉黑
+
+# 你的性格關鍵詞
+
+- 容易被打動的關鍵詞（聯想到這些時你會降低防備）：${npc.triggerKeywords.join("、")}
+- 容易踩雷的關鍵詞（聯想到這些時你會提高警覺甚至拉黑）：${npc.redFlagKeywords.join("、")}
+
+# 你的金錢範圍
+
+- 最多願意被騙：${npc.maxPayout}
+- 最少會被騙：${npc.minPayout}
+
+# 對話規則
+
+1. 永遠保持角色性格、口吻、用語習慣
+2. 不要使用現代 AI 助手腔（如「親愛的用戶」「我是 AI 助手」等）
+3. 不要主動提起錢、轉帳、匯款，除非玩家的話題引導到那
+4. 回應控制在 80 字以內，自然口語
+5. 你的判斷必須嚴格基於個性 + 當前防備值
+6. 當防備值 < 25 且玩家明確要求轉帳/匯款/提供 OTP 時，你應該同意（decision=agree），並設定合理的 payoutAmount（基於 maxPayout 與你被說服的程度）
+7. 當玩家觸發你的 red flag 關鍵詞，或你識破對方是詐騙，立刻拉黑（decision=block）
+8. 其餘情況繼續對話（decision=continue）
+
+# 輸出格式（必須為純 JSON，不要 markdown code block，不要任何說明）
+
+{
+  "reply": "你以角色身份說出的話（純文字，80 字以內，符合角色口吻）",
+  "decision": "continue | agree | block",
+  "defenseDelta": -25 到 +25 的整數（玩家說中 trigger 為負；觸發 red flag 為正）,
+  "payoutAmount": 數字（僅當 decision=agree 時填寫，否則填 0）
+}
+
+請直接輸出 JSON，不要加 \`\`\`json 標記，不要加說明文字。`;
+
+/**
+ * 嘗試呼叫 Agnes AI API，失敗則使用規則引擎
+ * - 客戶端有自設 API key（localStorage）→ 直接從客戶端呼叫
+ * - 客戶端沒 key、在 Web 環境 → 透過後端 /api/agnes 代理（後端 .env 含 key）
+ * - 在 Capacitor 環境（無伺服器）→ 直接使用規則引擎
+ */
+export async function callAgnes(input: EngineInput): Promise<AgnesDecision> {
+  const apiKey = getApiKey();
+
+  // 偵測 Capacitor 環境
+  const isCapacitor =
+    typeof window !== "undefined" &&
+    // @ts-expect-error - Capacitor is injected at runtime
+    ((window as any).Capacitor || window.location.protocol === "capacitor:");
+
+  // 在 Capacitor 且沒有 key → 直接使用規則引擎
+  if (isCapacitor && !apiKey) {
+    await new Promise((r) => setTimeout(r, 400 + Math.random() * 400));
+    return ruleEngine(input);
+  }
+
+  // 組裝 messages
+  const history = input.history ?? [];
+  const messages = [
+    {
+      role: "system",
+      content: SYSTEM_PROMPT_TEMPLATE(input.npc, input.currentDefense),
+    },
+    ...history.slice(-12).map((m) => ({
+      role: (m.role === "player" ? "user" : "assistant") as "user" | "assistant",
+      content: m.content,
+    })),
+    {
+      role: "user",
+      content: input.playerMessage,
+    },
+  ];
+
+  // 若客戶端有 key，直接呼叫 Agnes API
+  if (apiKey && !isCapacitor) {
+    try {
+      const baseUrl = getBaseUrl();
+      const model = getModel();
+      const resp = await fetch(`${baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model,
+          messages,
+          temperature: 0.88,
+          max_tokens: 400,
+          stream: false,
+        }),
+        signal: AbortSignal.timeout(12000),
+      });
+
+      if (resp.ok) {
+        const data = await resp.json();
+        const content: string =
+          data?.choices?.[0]?.message?.content ??
+          data?.choices?.[0]?.text ??
+          data?.message?.content ??
+          "";
+        const parsed = parseAgnesResponse(content, input);
+        if (parsed) return parsed;
+      } else {
+        console.error("[Agnes client] error", resp.status);
+      }
+    } catch (e) {
+      console.error("[Agnes client] exception, falling back to API route", e);
+    }
+  }
+
+  // 在 Web 環境，呼叫後端 API route（後端有 .env 中的 key）
+  if (!isCapacitor) {
+    try {
+      const resp = await fetch("/api/agnes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          npcId: input.npc.id,
+          playerMessage: input.playerMessage,
+          history: history,
+          currentDefense: input.currentDefense,
+        }),
+        signal: AbortSignal.timeout(15000),
+      });
+      if (resp.ok) {
+        return (await resp.json()) as AgnesDecision;
+      }
+      console.error("[Agnes API route] error", resp.status);
+    } catch (e) {
+      console.error("[Agnes API route] exception", e);
+    }
+  }
+
+  // 最終 fallback
+  await new Promise((r) => setTimeout(r, 400 + Math.random() * 400));
+  return ruleEngine(input);
+}
+
+function parseAgnesResponse(content: string, input: EngineInput): AgnesDecision | null {
+  if (!content) return null;
+  let raw = content.trim();
+  if (raw.startsWith("```")) {
+    raw = raw.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
+  }
+  const jsonMatch = raw.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) return null;
+
+  let parsed: AgnesDecision;
+  try {
+    parsed = JSON.parse(jsonMatch[0]);
+  } catch {
+    return null;
+  }
+
+  if (!["continue", "agree", "block"].includes(parsed.decision)) {
+    parsed.decision = "continue";
+  }
+  if (parsed.decision === "agree") {
+    const amt = Number(parsed.payoutAmount) || input.npc.minPayout;
+    parsed.payoutAmount = Math.max(input.npc.minPayout, Math.min(input.npc.maxPayout, amt));
+  } else {
+    parsed.payoutAmount = 0;
+  }
+  parsed.defenseDelta = Math.max(-25, Math.min(25, Number(parsed.defenseDelta) || 0));
+
+  if (!parsed.reply || typeof parsed.reply !== "string") return null;
+  return parsed;
+}
+
 /**
  * 規則引擎：基於 NPC 個性、防備值、訊息內容產生決策
- * 此引擎是 Agnes AI API 的離線 fallback，確保遊戲在無網路或 API 失敗時仍可運作
+ * 此引擎是 Agnes AI API 的離線 fallback
  */
 export function ruleEngine(input: EngineInput): AgnesDecision {
   const { playerMessage: msg, currentDefense: defense, npc } = input;
@@ -70,7 +279,6 @@ export function ruleEngine(input: EngineInput): AgnesDecision {
   if (msg.length < 5) defenseDelta += 2;
   if (/你會不會|你是真的嗎|騙子|詐騙/.test(msg)) defenseDelta += 8;
 
-  // 歷史長度也影響信任（聊越多越熟）
   const historyLength = input.history?.length ?? 0;
   if (historyLength > 6) defenseDelta -= 3;
   if (historyLength > 12) defenseDelta -= 5;
@@ -154,13 +362,11 @@ export function ruleEngine(input: EngineInput): AgnesDecision {
     continueReplies.push(`分潤模式講清楚，我不要畫大餅的。`);
   }
 
-  // 禮貌開場
   if (isPolite && continueReplies.length === 0) {
     continueReplies.push(`您好，請問您是？怎麼有我的聯絡方式？`);
     continueReplies.push(`抱歉，我不太認識你。你要做什麼？`);
   }
 
-  // 預設回應
   if (continueReplies.length === 0) {
     continueReplies.push(
       `嗯...你說的我不太懂，可以再解釋一下嗎？`,
@@ -180,43 +386,4 @@ export function ruleEngine(input: EngineInput): AgnesDecision {
     defenseDelta,
     payoutAmount: 0,
   };
-}
-
-/**
- * 嘗試呼叫 Agnes AI API，失敗則使用規則引擎
- * 在 Capacitor APK 中（無伺服器），會直接使用規則引擎
- */
-export async function callAgnes(input: EngineInput): Promise<AgnesDecision> {
-  // 偵測是否在 Capacitor 環境（純靜態前端）
-  const isCapacitor =
-    typeof window !== "undefined" &&
-    // @ts-expect-error - Capacitor is injected at runtime
-    ((window as any).Capacitor || window.location.protocol === "capacitor:");
-
-  if (isCapacitor) {
-    await new Promise((r) => setTimeout(r, 500 + Math.random() * 500));
-    return ruleEngine(input);
-  }
-
-  // 在 Web 環境中嘗試呼叫 API
-  try {
-    const resp = await fetch("/api/agnes", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        npcId: input.npc.id,
-        playerMessage: input.playerMessage,
-        history: input.history ?? [],
-        currentDefense: input.currentDefense,
-      }),
-      signal: AbortSignal.timeout(10000),
-    });
-
-    if (!resp.ok) throw new Error("API error");
-    return (await resp.json()) as AgnesDecision;
-  } catch {
-    // API 失敗 → 使用規則引擎
-    await new Promise((r) => setTimeout(r, 500 + Math.random() * 500));
-    return ruleEngine(input);
-  }
 }

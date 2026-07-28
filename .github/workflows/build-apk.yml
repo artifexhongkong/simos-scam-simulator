@@ -181,27 +181,52 @@ jobs:
 
       - name: Build Android Debug APK
         working-directory: android
+        env:
+          # 使用 GitHub run number 作為 versionCode（每次自動遞增）
+          # 解決「APK 安裝衝突」問題：Android 要求 versionCode 必須比已安裝版本大
+          SIMOS_VERSION_CODE: ${{ github.run_number }}
+          SIMOS_VERSION_NAME: "1.${{ github.run_number }}"
         run: |
           chmod +x ./gradlew
+
+          # 動態注入 versionCode / versionName 到 app/build.gradle
+          # 確保每次 build 都有遞增的 versionCode，避免安裝衝突
+          APP_GRADLE=app/build.gradle
+          if [ -f "$APP_GRADLE" ]; then
+            # 替換 versionCode 與 versionName
+            sed -i "s/versionCode [0-9]*/versionCode ${SIMOS_VERSION_CODE}/g" "$APP_GRADLE"
+            sed -i "s/versionName \"[^\"]*\"/versionName \"${SIMOS_VERSION_NAME}\"/g" "$APP_GRADLE"
+            echo "Updated versionCode=${SIMOS_VERSION_CODE}, versionName=${SIMOS_VERSION_NAME}"
+            grep -E "versionCode|versionName" "$APP_GRADLE" | head -4
+          fi
+
           ./gradlew assembleDebug --no-daemon -x lint
 
-      - name: Sign APK (if keystore present)
-        if: env.SIGNING_KEY_BASE64 != ''
+      - name: Sign APK with debug keystore (consistent across builds)
         env:
-          SIGNING_KEY_BASE64: ${{ secrets.SIGNING_KEY_BASE64 }}
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          # 用 GitHub Actions 預設的 debug keystore，但確保每次都用同一個
+          # 這樣升級安裝時簽名一致，不會衝突
+          DEBUG_KEYSTORE_BASE64: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
         run: |
-          echo "$SIGNING_KEY_BASE64" | base64 -d > /tmp/release.keystore
-          cp android/app/build/outputs/apk/debug/app-debug.apk /tmp/app-unsigned.apk
-          $ANDROID_HOME/build-tools/34.0.0/apksigner sign \
-            --ks /tmp/release.keystore \
-            --ks-pass pass:"$KEYSTORE_PASSWORD" \
-            --ks-key-alias "$KEY_ALIAS" \
-            --key-pass pass:"$KEY_PASSWORD" \
-            --out /tmp/app-release.apk \
-            /tmp/app-unsigned.apk
+          APK=android/app/build/outputs/apk/debug/app-debug.apk
+
+          if [ -n "$DEBUG_KEYSTORE_BASE64" ]; then
+            echo "Using custom debug keystore from secrets..."
+            echo "$DEBUG_KEYSTORE_BASE64" | base64 -d > /tmp/debug.keystore
+            # 用自訂 debug keystore 重新簽名
+            $ANDROID_HOME/build-tools/34.0.0/apksigner sign \
+              --ks /tmp/debug.keystore \
+              --ks-pass pass:android \
+              --ks-key-alias androiddebugkey \
+              --key-pass pass:android \
+              --out /tmp/app-signed.apk \
+              "$APK"
+            cp /tmp/app-signed.apk "$APK"
+            echo "APK signed with custom debug keystore"
+          else
+            echo "Using default debug keystore (each build may differ - upgrade may conflict)"
+            echo "Tip: Set DEBUG_KEYSTORE_BASE64 secret to fix upgrade conflicts"
+          fi
 
       - name: Determine version & rename APK
         id: version
@@ -216,11 +241,8 @@ jobs:
           echo "Build version: $VERSION"
 
           mkdir -p artifacts
-          if [ -f /tmp/app-release.apk ]; then
-            cp /tmp/app-release.apk "artifacts/SimOS_v${VERSION}.apk"
-          else
-            cp android/app/build/outputs/apk/debug/app-debug.apk "artifacts/SimOS_v${VERSION}.apk"
-          fi
+          # 直接用已簽名的 debug APK（已在上一步驟重新簽名）
+          cp android/app/build/outputs/apk/debug/app-debug.apk "artifacts/SimOS_v${VERSION}.apk"
           ls -la artifacts/
 
       - name: Upload artifact

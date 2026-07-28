@@ -172,6 +172,7 @@
     @apply border-border outline-ring/50;
     -webkit-tap-highlight-color: transparent;
     box-sizing: border-box;
+<<<<<<< HEAD
   }
   html {
     height: 100%;
@@ -209,7 +210,44 @@
   }
   /* #root / __next 等根容器 */
   #__next, #root {
+=======
+  }
+  :root {
+    /* 預設高度（會被 useAppHeight hook 動態覆寫） */
+    --app-height: 100vh;
+  }
+  html {
+>>>>>>> 1487d3f (fix(v2.2): 修復排版底部被切斷問題（VLM 驗證通過）)
     height: 100%;
+    width: 100%;
+  }
+  body {
+    @apply bg-background text-foreground;
+    overscroll-behavior: none;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+    touch-action: manipulation;
+    /* 使用 var(--app-height) 取代 100vh / 100dvh
+       原因：100vh 包含 URL bar；100dvh 在 Android WebView 不支援
+       useAppHeight hook 會動態計算並設定 --app-height */
+    height: var(--app-height);
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    background: #000;
+    overflow: hidden;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+  }
+  input, textarea {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+  #__next, #root {
+    height: var(--app-height);
     width: 100%;
   }
 }

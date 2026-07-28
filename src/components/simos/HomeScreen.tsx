@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { MessageCircle, Skull, Trophy, Settings as SettingsIcon, Sparkles } from "lucide-react";
+import { MessageCircle, Skull, Trophy, Settings as SettingsIcon, Sparkles, TrendingUp, Users, Target } from "lucide-react";
 import type { AppName } from "./SimOS";
 import { useGameStore } from "@/lib/game/store";
 
@@ -15,7 +15,7 @@ interface IOSAppTile {
   key: AppName;
   label: string;
   icon: React.ReactNode;
-  bg: string; // 漸層背景
+  bg: string;
   badge?: number;
 }
 
@@ -24,10 +24,12 @@ export function HomeScreen({ onOpenApp, intelPoints, scamScore }: HomeScreenProp
   const alias = useGameStore((s) => s.alias);
   const playerAvatar = useGameStore((s) => s.playerAvatar);
   const theme = useGameStore((s) => s.theme);
+  const unlockedNpcIds = useGameStore((s) => s.unlockedNpcIds);
+  const friendNpcIds = useGameStore((s) => s.friendNpcIds);
 
   const activeConvCount = Object.values(conversations).filter((c) => c.status === "active").length;
+  const succeededCount = Object.values(conversations).filter((c) => c.status === "succeeded").length;
 
-  // iOS 風格 App 圖示（圓角矩形 + 漸層背景）
   const apps: IOSAppTile[] = [
     {
       key: "telechat",
@@ -56,18 +58,22 @@ export function HomeScreen({ onOpenApp, intelPoints, scamScore }: HomeScreenProp
     },
   ];
 
-  // iOS 背景：深色用純黑漸層，淺色用淺灰漸層
   const bgStyle =
     theme === "dark"
       ? "linear-gradient(180deg, #1c1c1e 0%, #000000 100%)"
       : "linear-gradient(180deg, #f2f2f7 0%, #e5e5ea 100%)";
+
+  const cardBg = theme === "dark" ? "rgba(28, 28, 30, 0.72)" : "rgba(255, 255, 255, 0.72)";
+  const cardBorder = theme === "dark" ? "1px solid rgba(255,255,255,0.08)" : "1px solid rgba(0,0,0,0.06)";
+  const textMain = theme === "dark" ? "#fff" : "#000";
+  const textSub = "#8e8e93";
 
   return (
     <div
       className="h-full min-h-0 flex flex-col overflow-hidden relative"
       style={{ background: bgStyle }}
     >
-      {/* iOS 主畫面頂部時間顯示（大時鐘） */}
+      {/* iOS 主畫面頂部時間顯示 */}
       <div className="pt-2 pb-1 text-center shrink-0">
         <IOSTime />
       </div>
@@ -81,10 +87,7 @@ export function HomeScreen({ onOpenApp, intelPoints, scamScore }: HomeScreenProp
       >
         <div
           className="rounded-2xl p-2.5 flex items-center justify-between backdrop-blur-xl"
-          style={{
-            background: theme === "dark" ? "rgba(28, 28, 30, 0.72)" : "rgba(255, 255, 255, 0.72)",
-            border: theme === "dark" ? "1px solid rgba(255,255,255,0.08)" : "1px solid rgba(0,0,0,0.06)",
-          }}
+          style={{ background: cardBg, border: cardBorder }}
         >
           <div className="flex items-center gap-2">
             <div
@@ -94,13 +97,8 @@ export function HomeScreen({ onOpenApp, intelPoints, scamScore }: HomeScreenProp
               {playerAvatar}
             </div>
             <div>
-              <p style={{ color: "#8e8e93", fontSize: "9px" }}>
-                詐騙犯代號
-              </p>
-              <p
-                className="text-xs font-bold leading-tight"
-                style={{ color: theme === "dark" ? "#fff" : "#000" }}
-              >
+              <p style={{ color: textSub, fontSize: "9px" }}>詐騙犯代號</p>
+              <p className="text-xs font-bold leading-tight" style={{ color: textMain }}>
                 {alias}
               </p>
             </div>
@@ -117,9 +115,43 @@ export function HomeScreen({ onOpenApp, intelPoints, scamScore }: HomeScreenProp
         </div>
       </motion.div>
 
-      {/* iOS App 圖示網格（4 欄）- flex-1 填滿中間剩餘空間 */}
-      <div className="flex-1 min-h-0 overflow-y-auto px-5 pt-3">
-        <div className="grid grid-cols-4 gap-x-4 gap-y-4">
+      {/* 遊戲進度統計小卡片 - 填補中間空白 */}
+      <motion.div
+        initial={{ opacity: 0, y: -5 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.15 }}
+        className="mx-4 mb-3 shrink-0"
+      >
+        <div
+          className="rounded-2xl p-3 backdrop-blur-xl"
+          style={{ background: cardBg, border: cardBorder }}
+        >
+          <div className="grid grid-cols-3 gap-2">
+            <StatItem
+              icon={<Users className="w-3 h-3" />}
+              label="已解鎖"
+              value={`${unlockedNpcIds.length}`}
+              color="#5ac8fa"
+            />
+            <StatItem
+              icon={<MessageCircle className="w-3 h-3" />}
+              label="已加好友"
+              value={`${friendNpcIds.length}`}
+              color="#34c759"
+            />
+            <StatItem
+              icon={<TrendingUp className="w-3 h-3" />}
+              label="詐騙成功"
+              value={`${succeededCount}`}
+              color="#ff9500"
+            />
+          </div>
+        </div>
+      </motion.div>
+
+      {/* iOS App 圖示網格 - 頂部對齊（iPhone 主畫面風格） */}
+      <div className="flex-1 min-h-0 flex flex-col justify-start px-5 py-3">
+        <div className="grid grid-cols-4 gap-x-4 gap-y-4 mb-3">
           {apps.map((app, i) => (
             <motion.button
               key={app.key}
@@ -132,7 +164,7 @@ export function HomeScreen({ onOpenApp, intelPoints, scamScore }: HomeScreenProp
             >
               <div className="relative">
                 <div
-                  className="w-[58px] h-[58px] flex items-center justify-center"
+                  className="w-[56px] h-[56px] flex items-center justify-center"
                   style={{
                     background: app.bg,
                     borderRadius: "14px",
@@ -152,7 +184,7 @@ export function HomeScreen({ onOpenApp, intelPoints, scamScore }: HomeScreenProp
               </div>
               <span
                 className="text-[11px] font-medium leading-tight text-center max-w-[68px] truncate"
-                style={{ color: theme === "dark" ? "#fff" : "#000" }}
+                style={{ color: textMain }}
               >
                 {app.label}
               </span>
@@ -162,23 +194,20 @@ export function HomeScreen({ onOpenApp, intelPoints, scamScore }: HomeScreenProp
 
         {/* 免責聲明 */}
         <p
-          className="text-[9px] text-center mt-4 mb-2 leading-tight px-4"
+          className="text-[9px] text-center leading-tight px-4"
           style={{ color: theme === "dark" ? "rgba(255,255,255,0.3)" : "rgba(0,0,0,0.3)" }}
         >
           本作純屬虛構，旨在透過模擬提升防詐意識。
         </p>
       </div>
 
-      {/* iOS 底部透明 Dock 欄 - shrink-0 確保完整顯示 */}
+      {/* iOS 底部透明 Dock 欄 */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, delay: 0.4 }}
         className="px-3 pt-2 pb-2 shrink-0"
-        style={{
-          // safe-area-inset-bottom 確保不被系統導航列遮擋
-          paddingBottom: "calc(0.5rem + env(safe-area-inset-bottom, 0px))",
-        }}
+        style={{ paddingBottom: "calc(0.5rem + env(safe-area-inset-bottom, 0px))" }}
       >
         <div
           className="rounded-[28px] p-2.5 flex items-center justify-around backdrop-blur-2xl"
@@ -196,10 +225,7 @@ export function HomeScreen({ onOpenApp, intelPoints, scamScore }: HomeScreenProp
             >
               <div
                 className="w-[50px] h-[50px] flex items-center justify-center"
-                style={{
-                  background: app.bg,
-                  borderRadius: "12px",
-                }}
+                style={{ background: app.bg, borderRadius: "12px" }}
               >
                 {app.icon}
               </div>
@@ -215,19 +241,35 @@ export function HomeScreen({ onOpenApp, intelPoints, scamScore }: HomeScreenProp
           ))}
         </div>
       </motion.div>
-
-      {/* Home indicator - shrink-0 + safe-area */}
-      <div className="flex justify-center pb-1 shrink-0" style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
-        <div
-          className="w-32 h-1 rounded-full"
-          style={{ background: theme === "dark" ? "rgba(255,255,255,0.5)" : "rgba(0,0,0,0.5)" }}
-        />
-      </div>
     </div>
   );
 }
 
-/** iOS 主畫面大時鐘（與狀態欄小時鐘不同，這是主畫面上的大時間） */
+function StatItem({
+  icon,
+  label,
+  value,
+  color,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  color: string;
+}) {
+  return (
+    <div className="flex flex-col items-center gap-0.5">
+      <div className="flex items-center gap-1" style={{ color }}>
+        {icon}
+        <span className="text-[10px] font-medium">{label}</span>
+      </div>
+      <span className="text-sm font-bold" style={{ color }}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
+/** iOS 主畫面大時鐘 */
 function IOSTime() {
   const time = useCurrentTime();
   const theme = useGameStore((s) => s.theme);
@@ -242,9 +284,9 @@ function IOSTime() {
 }
 
 function useCurrentTime() {
-  // 簡易實作：每次 render 取當前時間
   const d = new Date();
   const h = d.getHours().toString().padStart(2, "0");
   const m = d.getMinutes().toString().padStart(2, "0");
   return `${h}:${m}`;
 }
+

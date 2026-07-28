@@ -2,6 +2,7 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useState } from "react";
+import { useAppHeight } from "@/lib/hooks/useAppHeight";
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -10,25 +11,34 @@ interface AppShellProps {
 
 /**
  * 全螢幕沉浸式 PhoneFrame
- * - 在網頁端：模擬手機外框，但內容填滿整個視窗
- * - 在 Capacitor APK：因 MainActivity 啟用 immersive sticky 模式，
- *   Android 系統狀態欄與導航欄會自動隱藏，由 App 完全佔用螢幕
  *
- * 重要：使用 100dvh（dynamic viewport height）而非 100vh
- *  - 100vh 在行動瀏覽器會包含 URL bar 高度，導致底部被切斷
- *  - 100dvh 會隨 URL bar 顯示/隱藏動態調整，確保底部永遠可見
+ * 重要：使用 var(--app-height) 取代 100vh / 100dvh
+ * - 100vh 在行動瀏覽器包含 URL bar 高度，導致底部被切斷
+ * - 100dvh 在 Android WebView 不支援（只 iOS Safari 支援）
+ * - var(--app-height) 由 useAppHeight hook 動態計算並設定
+ *   - 監聽 resize / visualViewport / orientationchange 等多重事件
+ *   - 確保在任何環境（瀏覽器 / Capacitor APK / 沉浸式）都能正確計算
  */
 export function PhoneFrame({ children }: { children: React.ReactNode }) {
+  // 呼叫 hook 觸發 --app-height 計算
+  useAppHeight();
+
   return (
-    <div
-      className="w-full flex items-center justify-center md:py-0 bg-black"
-      style={{ minHeight: "100dvh" }}
-    >
-      <div className="relative w-full md:w-[390px] bg-black overflow-hidden flex flex-col h-[100dvh] md:h-[844px]">
+    <div className="w-full flex items-center justify-center md:py-0 bg-black phone-frame-outer">
+      <div className="relative w-full md:w-[390px] bg-black overflow-hidden flex flex-col phone-frame-inner">
         {/* 動態島（只在桌面顯示） */}
         <div className="hidden md:block absolute top-2 left-1/2 -translate-x-1/2 w-28 h-7 bg-black rounded-full z-50" />
         {children}
       </div>
+      {/* 桌面固定高度覆蓋 */}
+      <style>{`
+        .phone-frame-outer { min-height: var(--app-height); }
+        .phone-frame-inner { height: var(--app-height); }
+        @media (min-width: 768px) {
+          .phone-frame-outer { min-height: 844px; padding: 0; }
+          .phone-frame-inner { height: 844px; border-radius: 44px; border: 10px solid #18181b; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); }
+        }
+      `}</style>
     </div>
   );
 }

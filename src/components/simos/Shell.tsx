@@ -13,11 +13,18 @@ interface AppShellProps {
  * - 在網頁端：模擬手機外框，但內容填滿整個視窗
  * - 在 Capacitor APK：因 MainActivity 啟用 immersive sticky 模式，
  *   Android 系統狀態欄與導航欄會自動隱藏，由 App 完全佔用螢幕
+ *
+ * 重要：使用 100dvh（dynamic viewport height）而非 100vh
+ *  - 100vh 在行動瀏覽器會包含 URL bar 高度，導致底部被切斷
+ *  - 100dvh 會隨 URL bar 顯示/隱藏動態調整，確保底部永遠可見
  */
 export function PhoneFrame({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen w-full bg-black flex items-center justify-center md:py-0">
-      <div className="relative w-full md:w-[390px] md:h-[844px] h-screen min-h-screen bg-black md:rounded-[44px] md:border-[10px] md:border-zinc-900 md:shadow-2xl overflow-hidden">
+    <div
+      className="w-full flex items-center justify-center md:py-0 bg-black"
+      style={{ minHeight: "100dvh" }}
+    >
+      <div className="relative w-full md:w-[390px] bg-black overflow-hidden flex flex-col h-[100dvh] md:h-[844px]">
         {/* 動態島（只在桌面顯示） */}
         <div className="hidden md:block absolute top-2 left-1/2 -translate-x-1/2 w-28 h-7 bg-black rounded-full z-50" />
         {children}

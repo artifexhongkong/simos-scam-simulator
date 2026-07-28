@@ -29,7 +29,7 @@ export function InfoBrokerApp({ onBack }: { onBack: () => void }) {
 
   return (
     <AppContainer title="情報販子" onBack={onBack} headerColor="bg-zinc-900">
-      <div className="h-full flex flex-col">
+      <div className="h-full min-h-0 flex flex-col">
         {/* 情報點數 banner */}
         <div className="px-4 py-3 bg-gradient-to-r from-emerald-900/40 to-zinc-900 border-b border-white/5 flex items-center justify-between">
           <div className="flex items-center gap-2">

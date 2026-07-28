@@ -102,7 +102,7 @@ export function SettingsApp({ onBack }: SettingsAppProps) {
 
   return (
     <AppContainer title="設定" onBack={onBack} headerColor="bg-zinc-800">
-      <div className="h-full overflow-y-auto">
+      <div className="h-full min-h-0 overflow-y-auto">
         {savedFlash && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}

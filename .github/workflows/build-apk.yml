@@ -106,8 +106,9 @@ jobs:
                   super.onCreate(savedInstanceState);
 
                   // Edge-to-edge 全螢幕沉浸式
+                  // 注意：setDecorFitsSystemWindows(false) 讓內容延伸到系統列下方
+                  // 但搭配 IMMERSIVE_STICKY 讓系統列自動隱藏，並透過 safe-area-inset 處理邊界
                   WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
-                  getWindow().addFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
 
                   WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
                   if (controller != null) {
@@ -131,11 +132,13 @@ jobs:
               }
           }
           JAVA
-          # 確認 AndroidManifest 指向正確的 MainActivity
+          # 確認 AndroidManifest 設定 windowSoftInputMode=adjustResize（軟鍵盤彈起時調整 WebView 高度）
           MANIFEST=android/app/src/main/AndroidManifest.xml
           if [ -f "$MANIFEST" ]; then
-            # 確保使用 NoActionBar 主題
-            sed -i 's|android:theme="@style/AppTheme.NoActionBarLaunch"|android:theme="@style/AppTheme.NoActionBarLaunch"|g' "$MANIFEST" || true
+            # 加入 windowSoftInputMode=adjustResize 確保軟鍵盤不遮擋輸入框
+            if ! grep -q "windowSoftInputMode" "$MANIFEST"; then
+              sed -i 's|android:exported="true">|android:exported="true"\n            android:windowSoftInputMode="adjustResize">|' "$MANIFEST" || true
+            fi
           fi
           # 加入全螢幕樣式
           STYLES=android/app/src/main/res/values/styles.xml

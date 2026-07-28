@@ -457,7 +457,8 @@ export function ChatWindow({ npc, onBack }: { npc: NpcProfile; onBack: () => voi
           style={{
             background: "var(--im-header-bg)",
             borderColor: "var(--im-header-border)",
-            paddingBottom: `calc(0.5rem + ${keyboardHeight}px)`,
+            // 同時處理軟鍵盤高度 + safe-area-bottom
+            paddingBottom: `calc(0.5rem + ${keyboardHeight}px + env(safe-area-inset-bottom, 0px))`,
           }}
         >
           {/* 快捷话术/圖片面板 */}

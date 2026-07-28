@@ -52,7 +52,7 @@ export function TeleChatApp({ onBack }: { onBack: () => void }) {
 
   return (
     <AppContainer title="TeleChat" onBack={onBack} headerColor="bg-blue-900/40">
-      <div className="h-full flex flex-col">
+      <div className="h-full min-h-0 flex flex-col">
         {/* 標題列 */}
         <div className="px-4 py-3 border-b border-white/5 bg-zinc-900/50 flex items-center justify-between">
           <h3 className="text-white text-base font-semibold">聊天</h3>

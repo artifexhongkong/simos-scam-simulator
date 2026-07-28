@@ -171,6 +171,15 @@
   * {
     @apply border-border outline-ring/50;
     -webkit-tap-highlight-color: transparent;
+    box-sizing: border-box;
+  }
+  html {
+    height: 100%;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    background: #000;
+    overflow: hidden;
   }
   body {
     @apply bg-background text-foreground;
@@ -180,6 +189,13 @@
     -webkit-user-select: none;
     user-select: none;
     touch-action: manipulation;
+    /* 重要：使用 100% 而非 100vh，避免行動瀏覽器 URL bar 造成高度計算錯誤 */
+    height: 100%;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    background: #000;
+    overflow: hidden;
     /* 行動裝置 safe-area insets */
     padding-top: env(safe-area-inset-top, 0px);
     padding-bottom: env(safe-area-inset-bottom, 0px);
@@ -191,13 +207,10 @@
     -webkit-user-select: text;
     user-select: text;
   }
-  html, body {
+  /* #root / __next 等根容器 */
+  #__next, #root {
     height: 100%;
     width: 100%;
-    margin: 0;
-    padding: 0;
-    background: #000;
-    overflow: hidden;
   }
 }
 
@@ -206,3 +219,13 @@
 .safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
 .safe-left { padding-left: env(safe-area-inset-left, 0px); }
 .safe-right { padding-right: env(safe-area-inset-right, 0px); }
+
+/* 動態視窗高度（適應軟鍵盤彈出/收起） */
+.h-dynamic {
+  height: 100vh; /* fallback */
+  height: 100dvh;
+}
+.min-h-dynamic {
+  min-height: 100vh;
+  min-height: 100dvh;
+}

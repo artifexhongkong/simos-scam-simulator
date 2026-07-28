@@ -64,11 +64,11 @@ export function HomeScreen({ onOpenApp, intelPoints, scamScore }: HomeScreenProp
 
   return (
     <div
-      className="h-full flex flex-col overflow-hidden relative"
+      className="h-full min-h-0 flex flex-col overflow-hidden relative"
       style={{ background: bgStyle }}
     >
       {/* iOS 主畫面頂部時間顯示（大時鐘） */}
-      <div className="pt-3 pb-2 text-center">
+      <div className="pt-2 pb-1 text-center shrink-0">
         <IOSTime />
       </div>
 
@@ -77,49 +77,49 @@ export function HomeScreen({ onOpenApp, intelPoints, scamScore }: HomeScreenProp
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
-        className="mx-4 mb-2"
+        className="mx-4 mb-2 shrink-0"
       >
         <div
-          className="rounded-2xl p-3 flex items-center justify-between backdrop-blur-xl"
+          className="rounded-2xl p-2.5 flex items-center justify-between backdrop-blur-xl"
           style={{
             background: theme === "dark" ? "rgba(28, 28, 30, 0.72)" : "rgba(255, 255, 255, 0.72)",
             border: theme === "dark" ? "1px solid rgba(255,255,255,0.08)" : "1px solid rgba(0,0,0,0.06)",
           }}
         >
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2">
             <div
-              className="w-10 h-10 rounded-full flex items-center justify-center text-xl"
+              className="w-9 h-9 rounded-full flex items-center justify-center text-lg"
               style={{ background: theme === "dark" ? "#48484a" : "#d1d1d6" }}
             >
               {playerAvatar}
             </div>
             <div>
-              <p style={{ color: theme === "dark" ? "#8e8e93" : "#8e8e93", fontSize: "10px" }}>
+              <p style={{ color: "#8e8e93", fontSize: "9px" }}>
                 詐騙犯代號
               </p>
               <p
-                className="text-sm font-bold leading-tight"
+                className="text-xs font-bold leading-tight"
                 style={{ color: theme === "dark" ? "#fff" : "#000" }}
               >
                 {alias}
               </p>
             </div>
           </div>
-          <div className="flex flex-col items-end gap-0.5">
+          <div className="flex items-center gap-2">
             <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30">
               <Sparkles className="w-2.5 h-2.5 text-emerald-400" />
               <span className="text-emerald-300 text-[10px] font-semibold">{intelPoints}</span>
             </div>
-            <span className="text-amber-400 text-[10px] font-medium">
+            <span className="text-amber-400 text-[11px] font-medium">
               ${scamScore.toLocaleString()}
             </span>
           </div>
         </div>
       </motion.div>
 
-      {/* iOS App 圖示網格（4 欄） */}
-      <div className="flex-1 overflow-y-auto px-5 pt-4">
-        <div className="grid grid-cols-4 gap-x-4 gap-y-5">
+      {/* iOS App 圖示網格（4 欄）- flex-1 填滿中間剩餘空間 */}
+      <div className="flex-1 min-h-0 overflow-y-auto px-5 pt-3">
+        <div className="grid grid-cols-4 gap-x-4 gap-y-4">
           {apps.map((app, i) => (
             <motion.button
               key={app.key}
@@ -128,11 +128,11 @@ export function HomeScreen({ onOpenApp, intelPoints, scamScore }: HomeScreenProp
               transition={{ duration: 0.35, delay: 0.05 * i + 0.1 }}
               whileTap={{ scale: 0.9 }}
               onClick={() => onOpenApp(app.key)}
-              className="flex flex-col items-center gap-1.5"
+              className="flex flex-col items-center gap-1"
             >
               <div className="relative">
                 <div
-                  className="w-[60px] h-[60px] flex items-center justify-center shadow-lg"
+                  className="w-[58px] h-[58px] flex items-center justify-center"
                   style={{
                     background: app.bg,
                     borderRadius: "14px",
@@ -160,29 +160,28 @@ export function HomeScreen({ onOpenApp, intelPoints, scamScore }: HomeScreenProp
           ))}
         </div>
 
-        {/* 第二行圖示預留位（讓版面更像 iPhone） */}
-        <div className="grid grid-cols-4 gap-x-4 gap-y-5 mt-5">
-          {/* 之後可加更多 App */}
-        </div>
-
         {/* 免責聲明 */}
         <p
-          className="text-[9px] text-center mt-6 mb-2 leading-tight px-4"
+          className="text-[9px] text-center mt-4 mb-2 leading-tight px-4"
           style={{ color: theme === "dark" ? "rgba(255,255,255,0.3)" : "rgba(0,0,0,0.3)" }}
         >
-          本作純屬虛構，旨在透過模擬提升防詐意識。請勿在現實中模仿任何行為。
+          本作純屬虛構，旨在透過模擬提升防詐意識。
         </p>
       </div>
 
-      {/* iOS 底部透明 Dock 欄 */}
+      {/* iOS 底部透明 Dock 欄 - shrink-0 確保完整顯示 */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, delay: 0.4 }}
-        className="px-4 pb-2"
+        className="px-3 pt-2 pb-2 shrink-0"
+        style={{
+          // safe-area-inset-bottom 確保不被系統導航列遮擋
+          paddingBottom: "calc(0.5rem + env(safe-area-inset-bottom, 0px))",
+        }}
       >
         <div
-          className="rounded-[28px] p-3 flex items-center justify-around backdrop-blur-2xl"
+          className="rounded-[28px] p-2.5 flex items-center justify-around backdrop-blur-2xl"
           style={{
             background: theme === "dark" ? "rgba(58, 58, 60, 0.6)" : "rgba(255, 255, 255, 0.6)",
             border: theme === "dark" ? "1px solid rgba(255,255,255,0.1)" : "1px solid rgba(0,0,0,0.06)",
@@ -196,7 +195,7 @@ export function HomeScreen({ onOpenApp, intelPoints, scamScore }: HomeScreenProp
               aria-label={app.label}
             >
               <div
-                className="w-[52px] h-[52px] flex items-center justify-center shadow-md"
+                className="w-[50px] h-[50px] flex items-center justify-center"
                 style={{
                   background: app.bg,
                   borderRadius: "12px",
@@ -217,8 +216,8 @@ export function HomeScreen({ onOpenApp, intelPoints, scamScore }: HomeScreenProp
         </div>
       </motion.div>
 
-      {/* Home indicator */}
-      <div className="flex justify-center pb-1">
+      {/* Home indicator - shrink-0 + safe-area */}
+      <div className="flex justify-center pb-1 shrink-0" style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
         <div
           className="w-32 h-1 rounded-full"
           style={{ background: theme === "dark" ? "rgba(255,255,255,0.5)" : "rgba(0,0,0,0.5)" }}

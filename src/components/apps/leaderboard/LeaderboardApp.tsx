@@ -51,7 +51,7 @@ export function LeaderboardApp({ onBack }: { onBack: () => void }) {
 
   return (
     <AppContainer title="業績排行榜" onBack={onBack} headerColor="bg-amber-900/40">
-      <div className="h-full flex flex-col">
+      <div className="h-full min-h-0 flex flex-col">
         {/* 玩家卡片 */}
         <div className="p-4 bg-gradient-to-br from-amber-900/30 via-zinc-900 to-black border-b border-amber-500/10">
           <motion.div

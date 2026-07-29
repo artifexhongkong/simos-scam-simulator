@@ -50,12 +50,32 @@ export function ChatWindow({ npc, onBack }: { npc: NpcProfile; onBack: () => voi
   const [showQuickPhrases, setShowQuickPhrases] = useState(false);
   const [showImageMaterials, setShowImageMaterials] = useState(false);
   const [showNpcInfo, setShowNpcInfo] = useState(false);
-  const [hasReset, setHasReset] = useState(false); // 重新開始只允許一次
+  const [hasReset, setHasReset] = useState(false);
+  const [aiConnected, setAiConnected] = useState<boolean | null>(null); // null=檢測中, true=正常, false=失敗
+  const [failedMessages, setFailedMessages] = useState<Set<string>>(new Set()); // 發送失敗的訊息 ID
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const userScrolledUpRef = useRef(false);
   const lastScrollTsRef = useRef(0);
+
+  // 進入聊天室時偵測 AI 連線
+  useEffect(() => {
+    let cancelled = false;
+    const checkConnection = async () => {
+      try {
+        const { testAgnesConnection } = await import("@/lib/agnes/engine");
+        const result = await testAgnesConnection();
+        if (!cancelled) {
+          setAiConnected(result.ok);
+        }
+      } catch {
+        if (!cancelled) setAiConnected(false);
+      }
+    };
+    checkConnection();
+    return () => { cancelled = true; };
+  }, [npc.id]);
 
   const scrollToBottom = useCallback((force = false) => {
     const now = Date.now();
@@ -136,12 +156,26 @@ export function ChatWindow({ npc, onBack }: { npc: NpcProfile; onBack: () => voi
 
   const isLocked = conv.status !== "active";
 
-  const sendMessage = async (text: string, imageMaterial?: { type: string; label: string }) => {
+  const sendMessage = async (text: string, imageMaterial?: { type: string; label: string }, retryMsgId?: string) => {
     const trimmed = (text || "").trim();
     if (!trimmed && !imageMaterial) return;
     if (thinking) return;
     const latestConv = useGameStore.getState().conversations[npc.id];
     if (!latestConv || latestConv.status !== "active") return;
+
+    // AI 連線檢查：如果未連線，訊息發送失敗
+    if (aiConnected === false) {
+      // 先 append 玩家訊息（帶失敗標記）
+      const playerMsg: ChatMessage = {
+        id: retryMsgId || genId(),
+        role: "player",
+        content: trimmed,
+        ts: Date.now(),
+      };
+      appendMessage(npc.id, playerMsg);
+      setFailedMessages(prev => new Set(prev).add(playerMsg.id));
+      return;
+    }
 
     // 流量檢查：每則訊息消耗 100MB
     const TRAFFIC_PER_MSG = 100;
@@ -269,13 +303,9 @@ export function ChatWindow({ npc, onBack }: { npc: NpcProfile; onBack: () => voi
       }
     } catch (e) {
       console.error("[ChatWindow] callAgnes failed:", e);
-      const errMsg: ChatMessage = {
-        id: genId(),
-        role: "system",
-        content: "⚠ 連線中斷，請稍後再試。",
-        ts: Date.now(),
-      };
-      appendMessage(npc.id, errMsg);
+      // 標記玩家訊息為發送失敗
+      setAiConnected(false);
+      setFailedMessages(prev => new Set(prev).add(playerMsg.id));
     } finally {
       setThinking(false);
       setTimeout(() => inputRef.current?.focus(), 100);
@@ -334,7 +364,7 @@ export function ChatWindow({ npc, onBack }: { npc: NpcProfile; onBack: () => voi
     }
   };
 
-  const canSend = input.trim().length > 0 && !thinking && !isLocked;
+  const canSend = input.trim().length > 0 && !thinking && !isLocked && aiConnected !== false;
 
   return (
     <div
@@ -371,9 +401,16 @@ export function ChatWindow({ npc, onBack }: { npc: NpcProfile; onBack: () => voi
             >
               {npc.avatar}
             </div>
-            <span className="text-[16px] font-semibold truncate max-w-[140px]" style={{ color: "var(--im-header-text)" }}>
-              {npc.displayName}
-            </span>
+            <div className="flex flex-col items-start">
+              <span className="text-[16px] font-semibold truncate max-w-[140px]" style={{ color: "var(--im-header-text)" }}>
+                {npc.displayName}
+              </span>
+              {aiConnected === false && (
+                <span className="text-[10px] font-medium" style={{ color: "#ff3b30" }}>
+                  連接網絡失敗
+                </span>
+              )}
+            </div>
           </button>
         </div>
 
@@ -445,6 +482,30 @@ export function ChatWindow({ npc, onBack }: { npc: NpcProfile; onBack: () => voi
             showTimestamp={showTimestamps}
             prevMsg={idx > 0 ? conv.messages[idx - 1] : undefined}
             onAvatarClick={() => setShowNpcInfo(true)}
+            isFailed={failedMessages.has(msg.id)}
+            onRetry={() => {
+              // 重新發送：先移除失敗標記，再重新發送
+              setFailedMessages(prev => {
+                const next = new Set(prev);
+                next.delete(msg.id);
+                return next;
+              });
+              // 重新偵測連線
+              const recheck = async () => {
+                try {
+                  const { testAgnesConnection } = await import("@/lib/agnes/engine");
+                  const result = await testAgnesConnection();
+                  setAiConnected(result.ok);
+                  if (result.ok) {
+                    sendMessage(msg.content, undefined, msg.id);
+                  }
+                } catch {
+                  setAiConnected(false);
+                  setFailedMessages(prev => new Set(prev).add(msg.id));
+                }
+              };
+              recheck();
+            }}
           />
         ))}
         {thinking && (
@@ -669,12 +730,16 @@ function MessageBubble({
   showTimestamp,
   prevMsg,
   onAvatarClick,
+  isFailed,
+  onRetry,
 }: {
   msg: ChatMessage;
   npcAvatar: string;
   showTimestamp: boolean;
   prevMsg?: ChatMessage;
   onAvatarClick?: () => void;
+  isFailed?: boolean;
+  onRetry?: () => void;
 }) {
   // 系統訊息：置中，灰色圓角
   if (msg.role === "system") {
@@ -752,6 +817,19 @@ function MessageBubble({
           )}
           {msg.content}
         </div>
+        {/* 發送失敗指示器 */}
+        {isFailed && isPlayer && (
+          <div className="flex items-center gap-1 mt-0.5">
+            <button
+              onClick={onRetry}
+              className="flex items-center gap-1 text-[11px] font-medium active:scale-95 transition"
+              style={{ color: "#ff3b30" }}
+            >
+              <AlertCircle className="w-3.5 h-3.5" />
+              發送失敗 · 點擊重試
+            </button>
+          </div>
+        )}
       </div>
     </motion.div>
   );

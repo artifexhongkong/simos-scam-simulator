@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { NPCS } from "@/lib/game/npcs";
-import { judgeDecision, type AgnesDecision, type AgnesMessage } from "@/lib/agnes/engine";
+import { ruleEngine, judgeDecision, type AgnesDecision, type AgnesMessage } from "@/lib/agnes/engine";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -54,10 +54,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = (await req.json()) as AgnesRequestBody;
     const npc = NPCS.find((n) => n.id === body.npcId);
-
-    if (!npc) {
-      return NextResponse.json({ error: "NPC_NOT_FOUND" }, { status: 404 });
-    }
+    if (!npc) return NextResponse.json({ error: "NPC_NOT_FOUND" }, { status: 404 });
 
     const apiKey = body.apiKey || AGNES_API_KEY;
     const baseUrl = (body.baseUrl || AGNES_BASE_URL).replace(/\/$/, "");
@@ -65,9 +62,12 @@ export async function POST(req: NextRequest) {
     const temperature = body.temperature ?? AGNES_TEMPERATURE;
     const history = body.messageHistory ?? [];
 
+    // 沒有 API key → fallback 到 ruleEngine
     if (!apiKey) {
-      // 沒有 API key → 返回錯誤（不 fallback）
-      return NextResponse.json({ error: "NO_API_KEY", message: "未設定 API Key" }, { status: 503 });
+      return NextResponse.json(ruleEngine({
+        sessionId: body.sessionId, npc, playerMessage: body.playerMessage,
+        currentDefense: body.currentDefense, history,
+      }));
     }
 
     const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
@@ -84,25 +84,19 @@ export async function POST(req: NextRequest) {
     try {
       const resp = await fetch(`${baseUrl}/chat/completions`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model,
-          messages,
-          temperature,
-          max_tokens: 200,
-          stream: false,
-        }),
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify({ model, messages, temperature, max_tokens: 200, stream: false }),
         signal: AbortSignal.timeout(15000),
       });
 
       if (!resp.ok) {
         const errText = await resp.text().catch(() => "");
         console.error(`[/api/agnes] HTTP ${resp.status}:`, errText.slice(0, 200));
-        // 返回錯誤（不 fallback 到 ruleEngine）
-        return NextResponse.json({ error: "API_ERROR", message: `AI API HTTP ${resp.status}` }, { status: 502 });
+        // 後端 fallback 到 ruleEngine（不讓玩家看到發送失敗）
+        return NextResponse.json(ruleEngine({
+          sessionId: body.sessionId, npc, playerMessage: body.playerMessage,
+          currentDefense: body.currentDefense, history,
+        }));
       }
 
       const data = await resp.json();
@@ -113,19 +107,16 @@ export async function POST(req: NextRequest) {
         "";
 
       if (!content || !content.trim()) {
-        return NextResponse.json({ error: "EMPTY_RESPONSE", message: "AI 回應為空" }, { status: 502 });
+        return NextResponse.json(ruleEngine({
+          sessionId: body.sessionId, npc, playerMessage: body.playerMessage,
+          currentDefense: body.currentDefense, history,
+        }));
       }
 
       const reply = content.trim();
       const decision = judgeDecision({
-        sessionId: body.sessionId,
-        npc,
-        playerMessage: body.playerMessage,
-        currentDefense: body.currentDefense,
-        history,
-        consecutiveUrgent: 0,
-        consecutiveMoney: 0,
-        turns: 0,
+        sessionId: body.sessionId, npc, playerMessage: body.playerMessage,
+        currentDefense: body.currentDefense, history,
       } as any, reply);
 
       const result: AgnesDecision = { reply, ...decision };
@@ -134,11 +125,14 @@ export async function POST(req: NextRequest) {
     } catch (fetchErr) {
       const errName = (fetchErr as Error)?.name || "Unknown";
       console.error(`[/api/agnes] fetch failed (${errName})`);
-      // 返回錯誤（不 fallback 到 ruleEngine）
-      return NextResponse.json({ error: "NETWORK_ERROR", message: `網路失敗: ${errName}` }, { status: 503 });
+      // 後端 fallback 到 ruleEngine
+      return NextResponse.json(ruleEngine({
+        sessionId: body.sessionId, npc, playerMessage: body.playerMessage,
+        currentDefense: body.currentDefense, history,
+      }));
     }
   } catch (e) {
     console.error("[/api/agnes] exception:", e);
-    return NextResponse.json({ error: "INTERNAL_ERROR", message: (e as Error)?.message }, { status: 500 });
+    return NextResponse.json({ error: "INTERNAL_ERROR" }, { status: 500 });
   }
 }

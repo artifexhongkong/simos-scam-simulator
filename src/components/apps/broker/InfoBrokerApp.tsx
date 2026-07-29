@@ -24,7 +24,7 @@ export function InfoBrokerApp({ onBack }: { onBack: () => void }) {
   const [showShop, setShowShop] = useState(false);
   const [shuffleKey, setShuffleKey] = useState(0); // 用於觸發隨機更換
 
-  // 每 15 秒隨機更換未知目標的顯示（模擬其他玩家正在選擇）
+  // 每 15 秒隨機更換未知目標的 emoji（模擬其他玩家正在選擇）
   useEffect(() => {
     const id = setInterval(() => {
       setShuffleKey(k => k + 1);
@@ -32,16 +32,11 @@ export function InfoBrokerApp({ onBack }: { onBack: () => void }) {
     return () => clearInterval(id);
   }, []);
 
-  // 隨機未知目標的 emoji 和特質（基於 shuffleKey）
+  // 隨機未知目標的 emoji（特質保持與 NPC 真實 hookTags 一致）
   const unknownEmojis = ["🔒", "❓", "👤", "🎭", "🕵️", "💀", "🫥", "🔇"];
-  const unknownTraits = ["離婚人士", "創業失敗", "剛中獎", "負債中", "退休公務員", "留學生", "單親媽媽", "小店老闆", "投資客", "醫療費急"];
-  const getUnknownDisplay = (npcId: string) => {
-    // 基於 npcId + shuffleKey 產生偽隨機
+  const getUnknownEmoji = (npcId: string) => {
     const seed = npcId.charCodeAt(0) + shuffleKey;
-    const emoji = unknownEmojis[seed % unknownEmojis.length];
-    const trait1 = unknownTraits[seed % unknownTraits.length];
-    const trait2 = unknownTraits[(seed + 3) % unknownTraits.length];
-    return { emoji, traits: [trait1, trait2] };
+    return unknownEmojis[seed % unknownEmojis.length];
   };
 
   const priceMultiplier = 1 + (riskLevel / 100);
@@ -165,7 +160,7 @@ export function InfoBrokerApp({ onBack }: { onBack: () => void }) {
                 <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-3xl shrink-0 relative" style={{ background: "var(--im-input-bg)" }}>
                   {unlocked ? npc.avatar : (
                     <>
-                      <span className="opacity-40">{getUnknownDisplay(npc.id).emoji}</span>
+                      <span className="opacity-40">{getUnknownEmoji(npc.id)}</span>
                       <div className="absolute inset-0 rounded-2xl bg-black/50 backdrop-blur-[2px] flex items-center justify-center">
                         <Lock className="w-5 h-5" style={{ color: textSub }} />
                       </div>
@@ -181,7 +176,7 @@ export function InfoBrokerApp({ onBack }: { onBack: () => void }) {
                   {unlocked ? (
                     <p className="text-xs mt-0.5 truncate" style={{ color: textSub }}>{npc.background.slice(0, 40)}...</p>
                   ) : (
-                    <p className="text-xs mt-0.5" style={{ color: textSub }}>特質：{getUnknownDisplay(npc.id).traits.join("・")}</p>
+                    <p className="text-xs mt-0.5" style={{ color: textSub }}>特質：{npc.hookTags.slice(0, 2).join("・")}</p>
                   )}
                 </div>
               </div>

@@ -127,12 +127,23 @@ export async function callAgnes(input: EngineInput): Promise<AgnesDecision> {
     playerMessage: input.playerMessage,
   });
 
-  if (apiKey) {
+  // 偵測 Capacitor 環境
+  const isCapacitor =
+    typeof window !== "undefined" &&
+    // @ts-expect-error - Capacitor is injected at runtime
+    ((window as any).Capacitor || window.location.protocol === "capacitor:");
+
+  // 在 Capacitor 環境且沒有 key → throw
+  if (isCapacitor && !apiKey) {
+    throw new Error("未設定 API Key");
+  }
+
+  // 在 Capacitor 環境 → 直接呼叫 Agnes API
+  if (isCapacitor && apiKey) {
+    // 直接呼叫邏輯（與下方相同）
     try {
       const baseUrl = getBaseUrl();
       const model = getModel();
-      const startTime = Date.now();
-
       const resp = await fetch(`${baseUrl}/chat/completions`, {
         method: "POST",
         headers: {
@@ -159,29 +170,97 @@ export async function callAgnes(input: EngineInput): Promise<AgnesDecision> {
 
         if (content && content.trim()) {
           const reply = content.trim();
-          console.debug("[Agnes] LLM success", { elapsed: Date.now() - startTime, reply });
-
           const decision = judgeDecision(input, reply);
-          console.debug("[Agnes] judged", decision);
           return { reply, ...decision };
         }
-        // AI 回應為空 → throw error
         throw new Error("AI 回應為空");
       } else {
         const errText = await resp.text().catch(() => "");
-        console.error("[Agnes] HTTP error", resp.status, errText.slice(0, 200));
-        // HTTP 錯誤 → throw error（不 fallback 到 ruleEngine）
         throw new Error(`AI API HTTP ${resp.status}: ${errText.slice(0, 100)}`);
       }
     } catch (e) {
-      console.error("[Agnes] fetch failed", e);
-      // 網路失敗 → throw error（不 fallback 到 ruleEngine）
       throw e;
     }
   }
 
-  // 沒有 API key → throw error
-  throw new Error("未設定 API Key");
+  // 在 Web 環境 → 走後端 API route（避免 CORS）
+  if (!isCapacitor) {
+    try {
+      const resp = await fetch("/api/agnes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: input.sessionId,
+          npcId: input.npc.id,
+          playerMessage: input.playerMessage,
+          messageHistory: history,
+          currentDefense: input.currentDefense,
+          temperature,
+        }),
+        signal: AbortSignal.timeout(20000),
+      });
+
+      if (resp.ok) {
+        return (await resp.json()) as AgnesDecision;
+      }
+
+      // 後端 API route 返回錯誤 → 嘗試直接呼叫（可能有自訂 API key）
+      const errData = await resp.json().catch(() => ({}));
+      console.error("[Agnes] API route error", resp.status, errData);
+    } catch (e) {
+      console.error("[Agnes] API route fetch failed", e);
+    }
+
+    // 如果有自訂 API key，嘗試直接呼叫（繞過後端）
+    if (apiKey) {
+      try {
+        const baseUrl = getBaseUrl();
+        const model = getModel();
+        const resp = await fetch(`${baseUrl}/chat/completions`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            model,
+            messages,
+            temperature,
+            max_tokens: 200,
+            stream: false,
+          }),
+          signal: AbortSignal.timeout(15000),
+        });
+
+        if (resp.ok) {
+          const data = await resp.json();
+          const content: string =
+            data?.choices?.[0]?.message?.content ??
+            data?.choices?.[0]?.text ??
+            data?.message?.content ??
+            "";
+
+          if (content && content.trim()) {
+            const reply = content.trim();
+            const decision = judgeDecision(input, reply);
+            return { reply, ...decision };
+          }
+          throw new Error("AI 回應為空");
+        } else {
+          const errText = await resp.text().catch(() => "");
+          throw new Error(`AI API HTTP ${resp.status}: ${errText.slice(0, 100)}`);
+        }
+      } catch (e) {
+        throw e;
+      }
+    }
+
+    // 沒有自訂 key 且後端也失敗 → throw
+    throw new Error("無法連接 AI 服務");
+  }
+
+  // 不應到達這裡
+  throw new Error("未知錯誤");
 }
 
 /**

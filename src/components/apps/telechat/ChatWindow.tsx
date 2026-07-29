@@ -51,31 +51,12 @@ export function ChatWindow({ npc, onBack }: { npc: NpcProfile; onBack: () => voi
   const [showImageMaterials, setShowImageMaterials] = useState(false);
   const [showNpcInfo, setShowNpcInfo] = useState(false);
   const [hasReset, setHasReset] = useState(false);
-  const [aiConnected, setAiConnected] = useState<boolean | null>(null); // null=檢測中, true=正常, false=失敗
-  const [failedMessages, setFailedMessages] = useState<Set<string>>(new Set()); // 發送失敗的訊息 ID
+  const [failedMessages, setFailedMessages] = useState<Set<string>>(new Set());
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const userScrolledUpRef = useRef(false);
   const lastScrollTsRef = useRef(0);
-
-  // 進入聊天室時偵測 AI 連線
-  useEffect(() => {
-    let cancelled = false;
-    const checkConnection = async () => {
-      try {
-        const { testAgnesConnection } = await import("@/lib/agnes/engine");
-        const result = await testAgnesConnection();
-        if (!cancelled) {
-          setAiConnected(result.ok);
-        }
-      } catch {
-        if (!cancelled) setAiConnected(false);
-      }
-    };
-    checkConnection();
-    return () => { cancelled = true; };
-  }, [npc.id]);
 
   const scrollToBottom = useCallback((force = false) => {
     const now = Date.now();
@@ -162,20 +143,6 @@ export function ChatWindow({ npc, onBack }: { npc: NpcProfile; onBack: () => voi
     if (thinking) return;
     const latestConv = useGameStore.getState().conversations[npc.id];
     if (!latestConv || latestConv.status !== "active") return;
-
-    // AI 連線檢查：如果未連線，訊息發送失敗
-    if (aiConnected === false) {
-      // 先 append 玩家訊息（帶失敗標記）
-      const playerMsg: ChatMessage = {
-        id: retryMsgId || genId(),
-        role: "player",
-        content: trimmed,
-        ts: Date.now(),
-      };
-      appendMessage(npc.id, playerMsg);
-      setFailedMessages(prev => new Set(prev).add(playerMsg.id));
-      return;
-    }
 
     // 流量檢查：每則訊息消耗 100MB
     const TRAFFIC_PER_MSG = 100;
@@ -303,8 +270,7 @@ export function ChatWindow({ npc, onBack }: { npc: NpcProfile; onBack: () => voi
       }
     } catch (e) {
       console.error("[ChatWindow] callAgnes failed:", e);
-      // 標記玩家訊息為發送失敗
-      setAiConnected(false);
+      // AI 連線失敗：標記玩家訊息為發送失敗，NPC 不發送任何內容
       setFailedMessages(prev => new Set(prev).add(playerMsg.id));
     } finally {
       setThinking(false);
@@ -364,7 +330,7 @@ export function ChatWindow({ npc, onBack }: { npc: NpcProfile; onBack: () => voi
     }
   };
 
-  const canSend = input.trim().length > 0 && !thinking && !isLocked && aiConnected !== false;
+  const canSend = input.trim().length > 0 && !thinking && !isLocked;
 
   return (
     <div
@@ -405,7 +371,7 @@ export function ChatWindow({ npc, onBack }: { npc: NpcProfile; onBack: () => voi
               <span className="text-[16px] font-semibold truncate max-w-[140px]" style={{ color: "var(--im-header-text)" }}>
                 {npc.displayName}
               </span>
-              {aiConnected === false && (
+              {failedMessages.size > 0 && (
                 <span className="text-[10px] font-medium" style={{ color: "#ff3b30" }}>
                   連接網絡失敗
                 </span>
@@ -484,27 +450,13 @@ export function ChatWindow({ npc, onBack }: { npc: NpcProfile; onBack: () => voi
             onAvatarClick={() => setShowNpcInfo(true)}
             isFailed={failedMessages.has(msg.id)}
             onRetry={() => {
-              // 重新發送：先移除失敗標記，再重新發送
+              // 重新發送：移除失敗標記，直接重試
               setFailedMessages(prev => {
                 const next = new Set(prev);
                 next.delete(msg.id);
                 return next;
               });
-              // 重新偵測連線
-              const recheck = async () => {
-                try {
-                  const { testAgnesConnection } = await import("@/lib/agnes/engine");
-                  const result = await testAgnesConnection();
-                  setAiConnected(result.ok);
-                  if (result.ok) {
-                    sendMessage(msg.content, undefined, msg.id);
-                  }
-                } catch {
-                  setAiConnected(false);
-                  setFailedMessages(prev => new Set(prev).add(msg.id));
-                }
-              };
-              recheck();
+              sendMessage(msg.content, undefined, msg.id);
             }}
           />
         ))}

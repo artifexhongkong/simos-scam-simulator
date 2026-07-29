@@ -116,6 +116,7 @@ export async function callAgnes(input: EngineInput): Promise<AgnesDecision> {
   ];
 
   // 直接呼叫 Agnes API（與 cultivation-world-zh 一致）
+  // 不使用 AbortSignal（避免 Next.js dev mode 的 AbortError 問題）
   const res = await fetch(`${baseUrl}/chat/completions`, {
     method: "POST",
     headers: {
@@ -129,7 +130,6 @@ export async function callAgnes(input: EngineInput): Promise<AgnesDecision> {
       max_tokens: 200,
       stream: false,
     }),
-    signal: AbortSignal.timeout(15000),
   });
 
   if (!res.ok) {
@@ -181,7 +181,6 @@ export async function testAgnesConnection(): Promise<{ ok: boolean; message: str
         max_tokens: 50,
         stream: false,
       }),
-      signal: AbortSignal.timeout(10000),
     });
 
     if (!res.ok) {

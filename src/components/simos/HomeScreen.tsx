@@ -1,15 +1,9 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { MessageCircle, Skull, Trophy, Settings as SettingsIcon, Sparkles, Phone, Compass, Safari } from "lucide-react";
+import { MessageCircle, Skull, Trophy, Settings as SettingsIcon, Coins, Wifi, ShieldAlert, Phone, Compass } from "lucide-react";
 import type { AppName } from "./SimOS";
 import { useGameStore } from "@/lib/game/store";
-
-interface HomeScreenProps {
-  onOpenApp: (app: AppName) => void;
-  intelPoints: number;
-  scamScore: number;
-}
 
 interface IOSAppTile {
   key: AppName;
@@ -27,11 +21,15 @@ interface DockTile {
   bg: string;
 }
 
-export function HomeScreen({ onOpenApp, intelPoints, scamScore }: HomeScreenProps) {
+export function HomeScreen({ onOpenApp }: { onOpenApp: (app: AppName) => void }) {
   const conversations = useGameStore((s) => s.conversations);
   const alias = useGameStore((s) => s.alias);
   const playerAvatar = useGameStore((s) => s.playerAvatar);
   const theme = useGameStore((s) => s.theme);
+  const darkCoin = useGameStore((s) => s.darkCoin);
+  const dataTraffic = useGameStore((s) => s.dataTraffic);
+  const riskLevel = useGameStore((s) => s.riskLevel);
+  const scamScore = useGameStore((s) => s.scamScore);
 
   // 計算未讀訊息數
   const unreadCount = Object.values(conversations).filter((c) => {
@@ -118,31 +116,53 @@ export function HomeScreen({ onOpenApp, intelPoints, scamScore }: HomeScreenProp
           className="mx-4 mb-2 mt-3 shrink-0"
         >
           <div
-            className="rounded-2xl p-2.5 flex items-center justify-between backdrop-blur-xl"
+            className="rounded-2xl p-2.5 backdrop-blur-xl"
             style={{ background: cardBg, border: cardBorder }}
           >
-            <div className="flex items-center gap-2">
-              <div
-                className="w-9 h-9 rounded-full flex items-center justify-center text-lg"
-                style={{ background: theme === "dark" ? "#48484a" : "#d1d1d6" }}
-              >
-                {playerAvatar}
+            {/* 上排：代號 + 詐騙總額 */}
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <div
+                  className="w-9 h-9 rounded-full flex items-center justify-center text-lg"
+                  style={{ background: theme === "dark" ? "#48484a" : "#d1d1d6" }}
+                >
+                  {playerAvatar}
+                </div>
+                <div>
+                  <p style={{ color: textSub, fontSize: "9px" }}>CC園區員工代號</p>
+                  <p className="text-xs font-bold leading-tight" style={{ color: textMain }}>
+                    {alias}
+                  </p>
+                </div>
               </div>
-              <div>
-                <p style={{ color: textSub, fontSize: "9px" }}>CC園區員工代號</p>
-                <p className="text-xs font-bold leading-tight" style={{ color: textMain }}>
-                  {alias}
-                </p>
+              <div className="flex flex-col items-end">
+                <span className="text-amber-500 text-sm font-bold">
+                  ${scamScore.toLocaleString()}
+                </span>
+                <span className="text-[9px]" style={{ color: textSub }}>總騙金額</span>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30">
-                <Sparkles className="w-2.5 h-2.5 text-emerald-400" />
-                <span className="text-emerald-300 text-[10px] font-semibold">{intelPoints}</span>
+
+            {/* 下排：三大資源 */}
+            <div className="grid grid-cols-3 gap-1.5">
+              {/* 暗網幣 */}
+              <div className="flex items-center gap-1 px-1.5 py-1 rounded-lg" style={{ background: theme === "dark" ? "rgba(28,28,30,0.6)" : "rgba(0,0,0,0.04)" }}>
+                <Coins className="w-3 h-3" style={{ color: "#bf5af2" }} />
+                <span className="text-[10px] font-semibold" style={{ color: "#bf5af2" }}>{darkCoin}</span>
+                <span className="text-[8px]" style={{ color: textSub }}>DRC</span>
               </div>
-              <span className="text-amber-400 text-[11px] font-medium">
-                ${scamScore.toLocaleString()}
-              </span>
+              {/* 流量卡 */}
+              <div className="flex items-center gap-1 px-1.5 py-1 rounded-lg" style={{ background: theme === "dark" ? "rgba(28,28,30,0.6)" : "rgba(0,0,0,0.04)" }}>
+                <Wifi className="w-3 h-3" style={{ color: dataTraffic < 10 ? "#ff3b30" : "#5ac8fa" }} />
+                <span className="text-[10px] font-semibold" style={{ color: dataTraffic < 10 ? "#ff3b30" : "#5ac8fa" }}>{dataTraffic}</span>
+                <span className="text-[8px]" style={{ color: textSub }}>GB</span>
+              </div>
+              {/* 風控值 */}
+              <div className="flex items-center gap-1 px-1.5 py-1 rounded-lg" style={{ background: theme === "dark" ? "rgba(28,28,30,0.6)" : "rgba(0,0,0,0.04)" }}>
+                <ShieldAlert className="w-3 h-3" style={{ color: riskLevel > 60 ? "#ff3b30" : riskLevel > 30 ? "#ff9500" : "#34c759" }} />
+                <span className="text-[10px] font-semibold" style={{ color: riskLevel > 60 ? "#ff3b30" : riskLevel > 30 ? "#ff9500" : "#34c759" }}>{riskLevel}</span>
+                <span className="text-[8px]" style={{ color: textSub }}>風控</span>
+              </div>
             </div>
           </div>
         </motion.div>

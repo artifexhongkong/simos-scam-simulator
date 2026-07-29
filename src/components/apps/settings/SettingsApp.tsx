@@ -35,8 +35,9 @@ export function SettingsApp({ onBack }: SettingsAppProps) {
   const setAlias = useGameStore((s) => s.setAlias);
   const resetGame = useGameStore((s) => s.resetGame);
   const scamScore = useGameStore((s) => s.scamScore);
-  const unlockedNpcIds = useGameStore((s) => s.unlockedNpcIds);
-  const friendNpcIds = useGameStore((s) => s.friendNpcIds);
+  const darkCoin = useGameStore((s) => s.darkCoin);
+  const dataTraffic = useGameStore((s) => s.dataTraffic);
+  const riskLevel = useGameStore((s) => s.riskLevel);
 
   const theme = useGameStore((s) => s.theme);
   const setTheme = useGameStore((s) => s.setTheme);
@@ -331,10 +332,11 @@ export function SettingsApp({ onBack }: SettingsAppProps) {
 
           {/* 遊戲統計 */}
           <Section icon={<Sparkles className="w-4 h-4" />} title="遊戲統計" cardBg={cardBg} cardBorder={cardBorder} textMain={textMain} textSub={textSub}>
-            <div className="grid grid-cols-3 gap-2">
-              <Stat label="積分" value={`$${scamScore.toLocaleString()}`} color="text-amber-500" />
-              <Stat label="已解鎖" value={`${unlockedNpcIds.length}`} color="text-blue-500" />
-              <Stat label="已加好友" value={`${friendNpcIds.length}`} color="text-emerald-500" />
+            <div className="grid grid-cols-2 gap-2">
+              <Stat label="總騙金額" value={`$${scamScore.toLocaleString()}`} color="text-amber-500" />
+              <Stat label="暗網幣" value={`${darkCoin} DRC`} color="text-purple-500" />
+              <Stat label="流量卡" value={`${dataTraffic} GB`} color="text-blue-500" />
+              <Stat label="風控值" value={`${riskLevel}/100`} color={riskLevel > 60 ? "text-red-500" : riskLevel > 30 ? "text-orange-500" : "text-emerald-500"} />
             </div>
           </Section>
 

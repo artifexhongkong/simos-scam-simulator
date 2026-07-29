@@ -16,8 +16,6 @@ export function SimOS() {
   const [activeApp, setActiveApp] = useState<AppName>("home");
   const [hydrated, setHydrated] = useState(false);
 
-  const intelPoints = useGameStore((s) => s.intelPoints);
-  const scamScore = useGameStore((s) => s.scamScore);
   const theme = useGameStore((s) => s.theme);
 
   useEffect(() => {
@@ -58,9 +56,7 @@ export function SimOS() {
   return (
     <PhoneFrame>
       <AppShell>
-        {activeApp === "home" && (
-          <HomeScreen onOpenApp={setActiveApp} intelPoints={intelPoints} scamScore={scamScore} />
-        )}
+        {activeApp === "home" && <HomeScreen onOpenApp={setActiveApp} />}
         {activeApp === "telechat" && <TeleChatApp onBack={() => setActiveApp("home")} />}
         {activeApp === "broker" && <InfoBrokerApp onBack={() => setActiveApp("home")} />}
         {activeApp === "leaderboard" && <LeaderboardApp onBack={() => setActiveApp("home")} />}

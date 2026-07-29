@@ -33,30 +33,31 @@ export interface GameState {
   // 玩家身份（每次新遊戲隨機生成）
   alias: string;
   playerId: string;
-  playerAvatar: string; // 玩家 emoji 頭像
-  playerTelechatId: string; // 玩家自己的 TeleChat ID
+  playerAvatar: string;
+  playerTelechatId: string;
 
   // UI 偏好設定
-  theme: "dark" | "light"; // iMessage 主題（iOS 模擬介面用）
-  showTimestamps: boolean; // 是否顯示訊息時間戳
-  uiStyle: "classic" | "ios"; // 介面風格：原版深色 / iOS 模擬介面
+  theme: "dark" | "light";
+  showTimestamps: boolean;
+  uiStyle: "classic" | "ios";
 
-  // 經濟系統：情報點數（用於購買情報，非遊戲主目標）
-  intelPoints: number;
+  // 經濟系統
+  darkCoin: number;       // 暗網幣（DRC）：購買情報的貨幣
+  dataTraffic: number;    // 流量卡（GB）：每則訊息消耗 1GB
+  riskLevel: number;      // 風控值（0-100）：越高越危險
+  scamScore: number;      // 詐騙總金額（遊戲主目標，用於排行榜）
 
-  // 詐騙積分（遊戲主目標，用於排行榜）
-  scamScore: number;
+  // 已購買情報的 NPC ID（含情報等級）
+  unlockedNpcIds: string[];        // 普通料子已解鎖
+  premiumNpcIds: string[];         // 精準有料已解鎖（含痛點）
 
-  // 已購買情報的 NPC ID
-  unlockedNpcIds: string[];
-
-  // 已加為好友的 NPC ID（TeleChat 好友列表）
+  // 已加為好友的 NPC ID
   friendNpcIds: string[];
 
   // 對話歷史
   conversations: Record<string, ConversationState>;
 
-  // 排行榜上其他對手的動態分數波動
+  // 排行榜
   rivalSnapshot: Record<string, number>;
   lastRivalUpdate: number;
 
@@ -65,8 +66,13 @@ export interface GameState {
   setTheme: (theme: "dark" | "light") => void;
   toggleTimestamps: () => void;
   setUiStyle: (style: "classic" | "ios") => void;
-  addIntelPoints: (n: number) => void;
-  purchaseIntel: (npcId: string) => boolean;
+  // 經濟操作
+  addDarkCoin: (n: number) => void;
+  consumeTraffic: (n: number) => boolean;
+  addTraffic: (n: number) => void;
+  adjustRisk: (delta: number) => void;
+  convertScamToCoin: () => void; // 詐騙金額兌換暗網幣
+  purchaseIntel: (npcId: string, premium: boolean) => boolean;
   addFriend: (telechatId: string) => { ok: boolean; error?: string; npcId?: string };
   startConversation: (npcId: string) => void;
   appendMessage: (npcId: string, msg: ChatMessage) => void;
@@ -78,7 +84,9 @@ export interface GameState {
   resetGame: () => void;
 }
 
-const INITIAL_INTEL_POINTS = 100;
+const INITIAL_DARK_COIN = 200;   // 初始暗網幣（夠買 2~3 個 NPC）
+const INITIAL_TRAFFIC = 50;      // 初始流量卡 50GB
+const INITIAL_RISK = 0;          // 初始風控值
 
 function genId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
@@ -124,12 +132,15 @@ export const useGameStore = create<GameState>()(
       playerId: genId(),
       playerAvatar: randomEmoji(),
       playerTelechatId: randomTelechatId(),
-      theme: "light", // 預設淺色模式
-      showTimestamps: true, // 預設開啟時間戳
-      uiStyle: "ios", // 預設 iOS 模擬介面（唯一選項）
-      intelPoints: INITIAL_INTEL_POINTS,
+      theme: "light",
+      showTimestamps: true,
+      uiStyle: "ios",
+      darkCoin: INITIAL_DARK_COIN,
+      dataTraffic: INITIAL_TRAFFIC,
+      riskLevel: INITIAL_RISK,
       scamScore: 0,
       unlockedNpcIds: [],
+      premiumNpcIds: [],
       friendNpcIds: [],
       conversations: {},
       rivalSnapshot: {},
@@ -141,18 +152,52 @@ export const useGameStore = create<GameState>()(
       toggleTimestamps: () => set((s) => ({ showTimestamps: !s.showTimestamps })),
       setUiStyle: (uiStyle) => set({ uiStyle }),
 
-      addIntelPoints: (n) => set((s) => ({ intelPoints: Math.max(0, s.intelPoints + n) })),
+      addDarkCoin: (n) => set((s) => ({ darkCoin: Math.max(0, s.darkCoin + n) })),
 
-      purchaseIntel: (npcId) => {
+      consumeTraffic: (n) => {
+        const s = get();
+        if (s.dataTraffic < n) return false;
+        set({ dataTraffic: s.dataTraffic - n });
+        return true;
+      },
+
+      addTraffic: (n) => set((s) => ({ dataTraffic: s.dataTraffic + n })),
+
+      adjustRisk: (delta) => set((s) => ({
+        riskLevel: Math.max(0, Math.min(100, s.riskLevel + delta)),
+      })),
+
+      convertScamToCoin: () => {
+        const s = get();
+        const convertible = Math.floor(s.scamScore / 1000) * 10;
+        if (convertible <= 0) return;
+        set({ darkCoin: s.darkCoin + convertible });
+      },
+
+      purchaseIntel: (npcId, premium) => {
         const npc = getNpcById(npcId);
         if (!npc) return false;
         const s = get();
-        if (s.unlockedNpcIds.includes(npcId)) return true;
-        if (s.intelPoints < npc.price) return false;
-        set({
-          intelPoints: s.intelPoints - npc.price,
-          unlockedNpcIds: [...s.unlockedNpcIds, npcId],
-        });
+        const priceMultiplier = 1 + (s.riskLevel / 100);
+        const basePrice = premium ? npc.price * 2 : npc.price;
+        const actualPrice = Math.ceil(basePrice * priceMultiplier);
+
+        if (premium) {
+          if (s.premiumNpcIds.includes(npcId)) return true;
+          if (s.darkCoin < actualPrice) return false;
+          if (!s.unlockedNpcIds.includes(npcId)) return false;
+          set({
+            darkCoin: s.darkCoin - actualPrice,
+            premiumNpcIds: [...s.premiumNpcIds, npcId],
+          });
+        } else {
+          if (s.unlockedNpcIds.includes(npcId)) return true;
+          if (s.darkCoin < actualPrice) return false;
+          set({
+            darkCoin: s.darkCoin - actualPrice,
+            unlockedNpcIds: [...s.unlockedNpcIds, npcId],
+          });
+        }
         return true;
       },
 
@@ -227,12 +272,20 @@ export const useGameStore = create<GameState>()(
           const conv = s.conversations[npcId];
           if (!conv) return {};
           const newScore = status === "succeeded" && payout ? s.scamScore + payout : s.scamScore;
+          // 詐騙成功：10% 金額自動轉為暗網幣（每 $100 = 1 DRC）
+          const newDarkCoin = status === "succeeded" && payout ? s.darkCoin + Math.floor(payout / 100) : s.darkCoin;
+          // 被封鎖：風控值 +15
+          const newRisk = status === "blocked" ? Math.min(100, s.riskLevel + 15) : s.riskLevel;
+          // 被警覺終止：風控值 +8
+          const finalRisk = status === "cautious" ? Math.min(100, newRisk + 8) : newRisk;
           return {
             conversations: {
               ...s.conversations,
               [npcId]: { ...conv, status, payout, endingReason: reason },
             },
             scamScore: newScore,
+            darkCoin: newDarkCoin,
+            riskLevel: finalRisk,
           };
         }),
 
@@ -299,9 +352,12 @@ export const useGameStore = create<GameState>()(
           playerId: genId(),
           playerAvatar: randomEmoji(),
           playerTelechatId: randomTelechatId(),
-          intelPoints: INITIAL_INTEL_POINTS,
+          darkCoin: INITIAL_DARK_COIN,
+          dataTraffic: INITIAL_TRAFFIC,
+          riskLevel: INITIAL_RISK,
           scamScore: 0,
           unlockedNpcIds: [],
+          premiumNpcIds: [],
           friendNpcIds: [],
           conversations: {},
           rivalSnapshot: {},

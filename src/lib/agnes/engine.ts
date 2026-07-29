@@ -71,9 +71,12 @@ function getTemperature(): number {
  * System Prompt - 參考 cultivation-world-zh 的簡潔風格
  * 加入記憶提醒：NPC 必須記住玩家在對話中說過的話
  */
-const SYSTEM_PROMPT = (npc: NpcProfile, defense: number) => `你現在是詐騙模擬遊戲中的普通市民「${npc.displayName}」，正在通過手機訊息 App（類似 WhatsApp/iMessage）與對方文字聊天。你必須用繁體中文第一人稱回應對方的訊息。
+const SYSTEM_PROMPT = (npc: NpcProfile, defense: number) => `你現在是詐騙模擬遊戲中的普通市民「${npc.displayName}」，正在通過手機訊息 App（類似 WhatsApp/iMessage）與對方文字聊天。
 
-重要：這是純文字訊息對話，不是面對面交談。你不會說「進來坐」「來我家」等面對面用語。你的回應就像在手機上打字回覆陌生人訊息一樣自然。
+重要規則：
+- 全程使用繁體中文回應，絕對不可以使用英文（除非是角色背景中的專有名詞如 IG、KOL、Grab 等）
+- 這是純文字訊息對話，不是面對面交談。你不會說「進來坐」「來我家」等面對面用語
+- 你的回應就像在手機上打字回覆陌生人訊息一樣自然
 
 角色設定:
 - ${npc.background}

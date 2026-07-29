@@ -356,12 +356,24 @@ export const useGameStore = create<GameState>()(
         });
       },
 
-      resetGame: () =>
+      resetGame: () => {
+        // 先清除 localStorage（避免 persist middleware 覆蓋回來）
+        if (typeof window !== "undefined") {
+          window.localStorage.removeItem("simos-scam-sim-save");
+          window.localStorage.removeItem("simos_battery");
+          window.localStorage.removeItem("simos_agnes_api_key");
+          window.localStorage.removeItem("simos_agnes_base_url");
+          window.localStorage.removeItem("simos_agnes_model");
+          window.localStorage.removeItem("simos_agnes_temperature");
+        }
         set({
           alias: randomAlias(),
           playerId: genId(),
           playerAvatar: randomEmoji(),
           playerTelechatId: randomTelechatId(),
+          theme: "light",
+          showTimestamps: true,
+          uiStyle: "ios",
           darkCoin: INITIAL_DARK_COIN,
           dataTraffic: INITIAL_TRAFFIC,
           riskLevel: INITIAL_RISK,
@@ -373,7 +385,8 @@ export const useGameStore = create<GameState>()(
           conversations: {},
           rivalSnapshot: {},
           lastRivalUpdate: 0,
-        }),
+        });
+      },
     }),
     {
       name: "simos-scam-sim-save",

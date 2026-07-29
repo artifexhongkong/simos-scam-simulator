@@ -11,6 +11,7 @@ export function InfoBrokerApp({ onBack }: { onBack: () => void }) {
   const riskLevel = useGameStore((s) => s.riskLevel);
   const unlockedNpcIds = useGameStore((s) => s.unlockedNpcIds);
   const premiumNpcIds = useGameStore((s) => s.premiumNpcIds);
+  const conversations = useGameStore((s) => s.conversations);
   const purchaseIntel = useGameStore((s) => s.purchaseIntel);
   const convertScamToCoin = useGameStore((s) => s.convertScamToCoin);
   const scamScore = useGameStore((s) => s.scamScore);
@@ -110,10 +111,24 @@ export function InfoBrokerApp({ onBack }: { onBack: () => void }) {
         )}
       </AnimatePresence>
 
-      {/* 目標列表 */}
+      {/* 目標列表 - 已詐騙成功的移除，已購買的往上排 */}
       <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-3 scroll-safe-bottom">
         <p className="text-xs px-1" style={{ color: textSub }}>可購買的情報（風控值影響價格）</p>
-        {NPCS.map((npc) => {
+        {NPCS
+          .filter((npc) => {
+            // 移除已詐騙成功的 NPC
+            const conv = conversations[npc.id];
+            return conv?.status !== "succeeded";
+          })
+          .sort((a, b) => {
+            // 已購買普通料子的往上移
+            const aUnlocked = unlockedNpcIds.includes(a.id);
+            const bUnlocked = unlockedNpcIds.includes(b.id);
+            if (aUnlocked && !bUnlocked) return -1;
+            if (!aUnlocked && bUnlocked) return 1;
+            return 0;
+          })
+          .map((npc) => {
           const unlocked = unlockedNpcIds.includes(npc.id);
           const premium = premiumNpcIds.includes(npc.id);
           const basePrice = npc.price;

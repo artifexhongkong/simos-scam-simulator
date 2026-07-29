@@ -427,6 +427,7 @@ export function ChatWindow({ npc, onBack }: { npc: NpcProfile; onBack: () => voi
             npcAvatar={npc.avatar}
             showTimestamp={showTimestamps}
             prevMsg={idx > 0 ? conv.messages[idx - 1] : undefined}
+            onAvatarClick={() => setShowNpcInfo(true)}
           />
         ))}
         {thinking && (
@@ -649,11 +650,13 @@ function MessageBubble({
   npcAvatar,
   showTimestamp,
   prevMsg,
+  onAvatarClick,
 }: {
   msg: ChatMessage;
   npcAvatar: string;
   showTimestamp: boolean;
   prevMsg?: ChatMessage;
+  onAvatarClick?: () => void;
 }) {
   // 系統訊息：置中，灰色圓角
   if (msg.role === "system") {
@@ -694,14 +697,16 @@ function MessageBubble({
       transition={{ duration: 0.15 }}
       className={`flex items-end gap-1.5 ${isPlayer ? "flex-row-reverse" : ""} ${isGroupStart ? "mt-2" : "mt-0.5"}`}
     >
-      {/* NPC 頭像 */}
+      {/* NPC 頭像 - 可點擊查看情報 */}
       {showAvatar ? (
-        <div
-          className="w-7 h-7 rounded-full flex items-center justify-center text-base shrink-0"
+        <button
+          onClick={() => onAvatarClick?.()}
+          className="w-7 h-7 rounded-full flex items-center justify-center text-base shrink-0 active:scale-90 transition"
           style={{ background: "var(--im-bubble-npc-bg)" }}
+          aria-label="查看情報"
         >
           {npcAvatar}
-        </div>
+        </button>
       ) : (
         !isPlayer && <div className="w-7 shrink-0" />
       )}

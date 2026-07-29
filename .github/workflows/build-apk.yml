@@ -97,6 +97,7 @@ jobs:
           import android.os.Build;
           import androidx.core.view.WindowCompat;
           import androidx.core.view.WindowInsetsControllerCompat;
+          import androidx.core.view.WindowInsetsCompat;
 
           import com.getcapacitor.BridgeActivity;
 
@@ -112,7 +113,7 @@ jobs:
                   WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
                   if (controller != null) {
                       controller.setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
-                      controller.hide(WindowInsetsControllerCompat.Type.systemBars());
+                      controller.hide(WindowInsetsCompat.Type.systemBars());
                   }
               }
 
@@ -123,7 +124,7 @@ jobs:
                   if (hasFocus) {
                       WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
                       if (controller != null) {
-                          controller.hide(WindowInsetsControllerCompat.Type.systemBars());
+                          controller.hide(WindowInsetsCompat.Type.systemBars());
                       }
                   }
               }

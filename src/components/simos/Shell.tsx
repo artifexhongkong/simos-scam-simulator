@@ -85,17 +85,8 @@ export function ClassicAppShell({ children, wallpaper = "tech" }: AppShellProps)
  */
 function PhoneStatusBar() {
   const [time, setTime] = useState("");
-  const [battery, setBattery] = useState(() => {
-    // 從 localStorage 讀取持久化的電量
-    if (typeof window !== "undefined") {
-      const saved = window.localStorage.getItem("simos_battery");
-      if (saved) {
-        const b = parseInt(saved, 10);
-        if (!isNaN(b) && b >= 0 && b <= 100) return b;
-      }
-    }
-    return 87;
-  });
+  const [battery, setBattery] = useState(87);
+  const [charging, setCharging] = useState(false);
 
   useEffect(() => {
     const updateTime = () => {
@@ -109,18 +100,31 @@ function PhoneStatusBar() {
     return () => clearInterval(id);
   }, []);
 
-  // 電量每 5 分鐘下降 1%，持久化到 localStorage
+  // 使用 Web Battery API 取得真實手機電量
   useEffect(() => {
-    const id = setInterval(() => {
-      setBattery((b) => {
-        const newB = b > 20 ? b - 1 : 100;
-        if (typeof window !== "undefined") {
-          window.localStorage.setItem("simos_battery", String(newB));
-        }
-        return newB;
-      });
-    }, 5 * 60 * 1000);
-    return () => clearInterval(id);
+    if (typeof navigator === "undefined" || !(navigator as any).getBattery) return;
+
+    let bat: any;
+    const updateBattery = () => {
+      if (bat) {
+        setBattery(Math.round(bat.level * 100));
+        setCharging(bat.charging);
+      }
+    };
+
+    (navigator as any).getBattery().then((b: any) => {
+      bat = b;
+      updateBattery();
+      b.addEventListener("levelchange", updateBattery);
+      b.addEventListener("chargingchange", updateBattery);
+    });
+
+    return () => {
+      if (bat) {
+        bat.removeEventListener("levelchange", updateBattery);
+        bat.removeEventListener("chargingchange", updateBattery);
+      }
+    };
   }, []);
 
   return (
@@ -132,7 +136,7 @@ function PhoneStatusBar() {
       <div className="flex items-center gap-1.5" style={{ color: "var(--im-statusbar-text, #000)" }}>
         <SignalIcon />
         <WifiIcon />
-        <BatteryIcon level={battery} />
+        <BatteryIcon level={battery} charging={charging} />
       </div>
     </div>
   );
@@ -160,10 +164,9 @@ function WifiIcon() {
   );
 }
 
-function BatteryIcon({ level }: { level: number }) {
+function BatteryIcon({ level, charging }: { level: number; charging?: boolean }) {
   const isLow = level < 20;
-  const isCharging = level === 100;
-  const fillColor = isCharging ? "#34d399" : isLow ? "#f87171" : "currentColor";
+  const fillColor = charging ? "#34d399" : isLow ? "#f87171" : "currentColor";
   const barWidth = Math.max(2, (level / 100) * 18);
 
   return (
@@ -177,6 +180,11 @@ function BatteryIcon({ level }: { level: number }) {
           />
         </div>
         <div className="w-[1.5px] h-[4px] rounded-r-sm ml-[0.5px]" style={{ background: "currentColor", opacity: 0.8 }} />
+        {charging && (
+          <svg width="8" height="8" viewBox="0 0 8 8" fill="#34d399" className="absolute" style={{ left: "7px", top: "1.5px" }}>
+            <path d="M4 0L1 4.5h2L2.5 8 7 3.5H5L6 0z" />
+          </svg>
+        )}
       </div>
     </div>
   );

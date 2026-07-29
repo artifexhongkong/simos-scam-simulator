@@ -27,7 +27,7 @@ export interface EngineInput {
   turns?: number;
 }
 
-const EMBEDDED_API_KEY = "sk-sZHmum9naNmNT2XDgTYrunR27OMEaeCSiUHJx37TCVOJHpPs";
+const EMBEDDED_API_KEY = "sk-1we9JtwOm3D2uNuHD0FDuHAQkFRsa5GAMxcNPfiImBgBvDQR";
 const EMBEDDED_BASE_URL = "https://apihub.agnes-ai.com/v1";
 const EMBEDDED_MODEL = "agnes-2.5-flash";
 const EMBEDDED_TEMPERATURE = 0.9; // 與 cultivation-world-zh 一致

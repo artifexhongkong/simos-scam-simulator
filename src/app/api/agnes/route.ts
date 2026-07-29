@@ -9,8 +9,8 @@ export const dynamic = "force-dynamic";
 const AGNES_API_KEY = process.env.AGNES_API_KEY || process.env.NEXT_PUBLIC_AGNES_API_KEY || "";
 const AGNES_BASE_URL = (process.env.AGNES_BASE_URL || process.env.NEXT_PUBLIC_AGNES_BASE_URL || "https://apihub.agnes-ai.com/v1").replace(/\/$/, "");
 const AGNES_MODEL = process.env.AGNES_MODEL || process.env.NEXT_PUBLIC_AGNES_MODEL || "agnes-2.5-flash";
-// 降低 temperature 避免 AI 隨意擴充劇情
-const AGNES_TEMPERATURE = parseFloat(process.env.AGNES_TEMPERATURE || process.env.NEXT_PUBLIC_AGNES_TEMPERATURE || "0.6");
+// 參考 cultivation-world-zh：temperature 0.9
+const AGNES_TEMPERATURE = parseFloat(process.env.AGNES_TEMPERATURE || process.env.NEXT_PUBLIC_AGNES_TEMPERATURE || "0.9");
 
 interface AgnesRequestBody {
   sessionId: string;
@@ -24,25 +24,24 @@ interface AgnesRequestBody {
   model?: string;
 }
 
-const SYSTEM_PROMPT = (npcBackground: string, npcName: string, defense: number, maxPayout: number, minPayout: number) => `你是一名普通市民。你會根據玩家真實發送的訊息自然回應，不會主動提起玩家沒說過的話題。
+const SYSTEM_PROMPT = (npcBackground: string, npcName: string, npcPersonality: string, defense: number, maxPayout: number, minPayout: number) => `你現在是詐騙模擬遊戲中的普通市民「${npcName}」，必須用繁體中文第一人稱回應玩家的話。
 
-【你的角色】
-你是「${npcName}」，一位普通市民。背景：${npcBackground}
+角色設定:
+- ${npcBackground}
+- 個性: ${npcPersonality}
+- 說話語氣必須符合此角色背景
 
-你目前的內在狀態：
-- 信任度：${100 - defense} / 100（0=完全不信任，50=觀察中，100=完全信任會聽從）
-- 警惕值：${defense} / 100（0=完全放鬆，100=高度警覺會拉黑）
+當前狀態:
+- 信任度: ${100 - defense}/100（0=不信任，100=完全信任會聽從）
+- 警惕值: ${defense}/100（0=放鬆，100=警覺會拉黑）
 
-【回應規則】
-1. 永遠保持角色性格與口吻，使用符合背景的用語。
-2. 不要主動提起錢、轉帳、匯款，除非玩家的話題引導到那。
-3. 回應 30-80 字內，自然口語。
-4. 必須閱讀並記住前面的對話歷史，回應要有上下文連貫性。
-5. 不要重複你之前說過的完全相同的話，但可以針對玩家的新訊息自然延伸對話。
-6. 根據你的個性與當前信任度決定態度。
-7. 你最多願意被騙 ${maxPayout}，最少 ${minPayout}。
-8. 直接輸出純文字回應，不要加引號、不要加 JSON、不要加任何說明。
-9. 不可以虛構玩家沒說過的資訊，但可以根據玩家這一輪的話自然回應。`;
+規則:
+1. 永遠保持角色性格，不要跳出角色。
+2. 回應 30-80 字內，自然口語。
+3. 不要主動提起錢、轉帳，除非玩家引導到那。
+4. 不要現代 AI 助手腔。
+5. 根據當前信任度決定態度：信任高時親切配合，信任低時質疑保持距離。
+6. 你最多願意被騙 ${maxPayout}，最少 ${minPayout}。`;
 
 export async function POST(req: NextRequest) {
   const startTime = Date.now();
@@ -74,10 +73,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 組裝 messages: [system] + [歷史] + [玩家輸入]
+    // 組裝 messages: [system] + [最近6則歷史] + [玩家輸入]
     const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
-      { role: "system", content: SYSTEM_PROMPT(npc.background, npc.displayName, body.currentDefense, npc.maxPayout, npc.minPayout) },
-      ...history.slice(-20).map((m) => ({
+      { role: "system", content: SYSTEM_PROMPT(npc.background, npc.displayName, npc.hiddenPersonality, body.currentDefense, npc.maxPayout, npc.minPayout) },
+      ...history.slice(-6).map((m) => ({
         role: (m.role === "player" ? "user" : "assistant") as "user" | "assistant",
         content: m.content,
       })),
@@ -106,7 +105,7 @@ export async function POST(req: NextRequest) {
           model,
           messages,
           temperature,
-          max_tokens: 250,
+          max_tokens: 200,
           stream: false,
         }),
         signal: AbortSignal.timeout(15000),

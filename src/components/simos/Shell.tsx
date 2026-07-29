@@ -85,7 +85,17 @@ export function ClassicAppShell({ children, wallpaper = "tech" }: AppShellProps)
  */
 function PhoneStatusBar() {
   const [time, setTime] = useState("");
-  const [battery, setBattery] = useState(87);
+  const [battery, setBattery] = useState(() => {
+    // 從 localStorage 讀取持久化的電量
+    if (typeof window !== "undefined") {
+      const saved = window.localStorage.getItem("simos_battery");
+      if (saved) {
+        const b = parseInt(saved, 10);
+        if (!isNaN(b) && b >= 0 && b <= 100) return b;
+      }
+    }
+    return 87;
+  });
 
   useEffect(() => {
     const updateTime = () => {
@@ -99,9 +109,16 @@ function PhoneStatusBar() {
     return () => clearInterval(id);
   }, []);
 
+  // 電量每 5 分鐘下降 1%，持久化到 localStorage
   useEffect(() => {
     const id = setInterval(() => {
-      setBattery((b) => (b > 20 ? b - 1 : 100));
+      setBattery((b) => {
+        const newB = b > 20 ? b - 1 : 100;
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem("simos_battery", String(newB));
+        }
+        return newB;
+      });
     }, 5 * 60 * 1000);
     return () => clearInterval(id);
   }, []);

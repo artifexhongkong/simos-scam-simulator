@@ -18,8 +18,13 @@ import {
   Moon,
   Clock,
   Palette,
+  Zap,
+  CheckCircle2,
+  XCircle,
+  Loader2,
 } from "lucide-react";
 import { useGameStore } from "@/lib/game/store";
+import { testAgnesConnection } from "@/lib/agnes/engine";
 
 interface SettingsAppProps {
   onBack: () => void;
@@ -318,6 +323,9 @@ export function SettingsApp({ onBack }: SettingsAppProps) {
               >
                 <Save className="w-3.5 h-3.5" /> 儲存 Agnes 設定
               </button>
+
+              {/* 測試 AI 連線按鈕 */}
+              <TestAIButton />
             </div>
           </Section>
 
@@ -436,6 +444,64 @@ function Section({
         <h3 className="text-sm font-semibold" style={{ color: textMain }}>{title}</h3>
       </div>
       {children}
+    </div>
+  );
+}
+
+function TestAIButton() {
+  const [status, setStatus] = useState<"idle" | "testing" | "ok" | "fail">("idle");
+  const [message, setMessage] = useState("");
+  const [reply, setReply] = useState("");
+
+  const handleTest = async () => {
+    setStatus("testing");
+    setMessage("");
+    setReply("");
+    const result = await testAgnesConnection();
+    if (result.ok) {
+      setStatus("ok");
+      setMessage(result.message);
+      setReply(result.reply || "");
+    } else {
+      setStatus("fail");
+      setMessage(result.message);
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      <button
+        onClick={handleTest}
+        disabled={status === "testing"}
+        className="w-full py-2 rounded-lg text-sm font-semibold active:scale-95 transition flex items-center justify-center gap-1.5"
+        style={{
+          background: status === "ok" ? "rgba(16, 185, 129, 0.15)" : status === "fail" ? "rgba(239, 68, 68, 0.15)" : "var(--im-input-bg)",
+          color: status === "ok" ? "#10b981" : status === "fail" ? "#ef4444" : "var(--im-link-text)",
+          border: status === "ok" ? "1px solid rgba(16, 185, 129, 0.3)" : status === "fail" ? "1px solid rgba(239, 68, 68, 0.3)" : "1px solid var(--im-input-border)",
+        }}
+      >
+        {status === "testing" ? (
+          <><Loader2 className="w-3.5 h-3.5 animate-spin" /> 測試中...</>
+        ) : status === "ok" ? (
+          <><CheckCircle2 className="w-3.5 h-3.5" /> AI 連線正常</>
+        ) : status === "fail" ? (
+          <><XCircle className="w-3.5 h-3.5" /> 連線失敗，點擊重試</>
+        ) : (
+          <><Zap className="w-3.5 h-3.5" /> 測試 AI 連線</>
+        )}
+      </button>
+      {message && (
+        <div
+          className="text-[11px] px-3 py-2 rounded-lg"
+          style={{
+            background: status === "ok" ? "rgba(16, 185, 129, 0.08)" : "rgba(239, 68, 68, 0.08)",
+            color: status === "ok" ? "#10b981" : "#ef4444",
+          }}
+        >
+          {message}
+          {reply && <div className="mt-1 opacity-80">AI 回應：{reply}</div>}
+        </div>
+      )}
     </div>
   );
 }

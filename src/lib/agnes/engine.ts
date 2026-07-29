@@ -1,5 +1,6 @@
-// 共用的 Agnes AI 引擎 - 參考 cultivation-world-zh 模式
-// 簡潔的 system prompt + 最近 6 則歷史 + 適當 temperature
+// Agnes AI 引擎 - 簡潔版（參考 cultivation-world-zh）
+// 直接從客戶端呼叫 Agnes API，不走後端代理
+// 單一路徑，無多層重試，快速回應
 
 import { NPCS, type NpcProfile } from "@/lib/game/npcs";
 
@@ -27,10 +28,11 @@ export interface EngineInput {
   turns?: number;
 }
 
+// 內嵌 API key（用戶提供的測試 key）
 const EMBEDDED_API_KEY = "sk-1we9JtwOm3D2uNuHD0FDuHAQkFRsa5GAMxcNPfiImBgBvDQR";
 const EMBEDDED_BASE_URL = "https://apihub.agnes-ai.com/v1";
 const EMBEDDED_MODEL = "agnes-2.5-flash";
-const EMBEDDED_TEMPERATURE = 0.9; // 與 cultivation-world-zh 一致
+const EMBEDDED_TEMPERATURE = 0.9;
 
 function getApiKey(): string {
   if (typeof window !== "undefined") {
@@ -67,10 +69,6 @@ function getTemperature(): number {
   return EMBEDDED_TEMPERATURE;
 }
 
-/**
- * System Prompt - 參考 cultivation-world-zh 的簡潔風格
- * 加入記憶提醒：NPC 必須記住玩家在對話中說過的話
- */
 const SYSTEM_PROMPT = (npc: NpcProfile, defense: number) => `你現在是詐騙模擬遊戲中的普通市民「${npc.displayName}」，正在通過手機訊息 App（類似 WhatsApp/iMessage）與對方文字聊天。
 
 重要規則：
@@ -98,20 +96,18 @@ const SYSTEM_PROMPT = (npc: NpcProfile, defense: number) => `你現在是詐騙�
 8. 這是陌生人通過訊息 App 的初次接觸，你的第一反應應該是疑惑對方是誰、怎麼有你的號碼，而不是熱情招待。`;
 
 /**
- * 呼叫 Agnes AI - 參考 cultivation-world-zh 模式
- * 1. 簡潔 system prompt
- * 2. 只取最近 6 則歷史（避免 token 過長）
- * 3. temperature 0.9
- * 4. AI 回純文字 → 用規則引擎判定 decision
+ * 呼叫 Agnes AI — 簡潔版（參考 cultivation-world-zh）
+ * 直接從客戶端呼叫 Agnes API，單一路徑，無多層重試
  */
 export async function callAgnes(input: EngineInput): Promise<AgnesDecision> {
   const apiKey = getApiKey();
   const temperature = input.temperature ?? getTemperature();
+  const baseUrl = getBaseUrl();
+  const model = getModel();
 
   const history = input.history ?? [];
   const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
     { role: "system", content: SYSTEM_PROMPT(input.npc, input.currentDefense) },
-    // 取最近 12 則歷史（6 則太少會忘記，12 則平衡 token 與記憶）
     ...history.slice(-12).map((m) => ({
       role: (m.role === "player" ? "user" : "assistant") as "user" | "assistant",
       content: m.content,
@@ -119,241 +115,96 @@ export async function callAgnes(input: EngineInput): Promise<AgnesDecision> {
     { role: "user", content: input.playerMessage },
   ];
 
-  console.debug("[Agnes] callAgnes", {
-    sessionId: input.sessionId,
-    npcName: input.npc.displayName,
-    defense: input.currentDefense,
-    historyLength: history.length,
-    playerMessage: input.playerMessage,
+  // 直接呼叫 Agnes API（與 cultivation-world-zh 一致）
+  const res = await fetch(`${baseUrl}/chat/completions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      messages,
+      temperature,
+      max_tokens: 200,
+      stream: false,
+    }),
+    signal: AbortSignal.timeout(15000),
   });
 
-  // 偵測 Capacitor 環境
-  const isCapacitor =
-    typeof window !== "undefined" &&
-    // @ts-expect-error - Capacitor is injected at runtime
-    ((window as any).Capacitor || window.location.protocol === "capacitor:");
-
-  // 在 Capacitor 環境且沒有 key → throw
-  if (isCapacitor && !apiKey) {
-    throw new Error("未設定 API Key");
+  if (!res.ok) {
+    const errText = await res.text().catch(() => "");
+    throw new Error(`AI API HTTP ${res.status}: ${errText.slice(0, 100)}`);
   }
 
-  // 在 Capacitor 環境 → 直接呼叫 Agnes API
-  if (isCapacitor && apiKey) {
-    // 直接呼叫邏輯（與下方相同）
-    try {
-      const baseUrl = getBaseUrl();
-      const model = getModel();
-      const resp = await fetch(`${baseUrl}/chat/completions`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model,
-          messages,
-          temperature,
-          max_tokens: 200,
-          stream: false,
-        }),
-        signal: AbortSignal.timeout(15000),
-      });
+  const data = await res.json();
+  const content: string =
+    data?.choices?.[0]?.message?.content ??
+    data?.choices?.[0]?.text ??
+    data?.message?.content ??
+    "";
 
-      if (resp.ok) {
-        const data = await resp.json();
-        const content: string =
-          data?.choices?.[0]?.message?.content ??
-          data?.choices?.[0]?.text ??
-          data?.message?.content ??
-          "";
-
-        if (content && content.trim()) {
-          const reply = content.trim();
-          const decision = judgeDecision(input, reply);
-          return { reply, ...decision };
-        }
-        throw new Error("AI 回應為空");
-      } else {
-        const errText = await resp.text().catch(() => "");
-        throw new Error(`AI API HTTP ${resp.status}: ${errText.slice(0, 100)}`);
-      }
-    } catch (e) {
-      throw e;
-    }
+  if (!content || !content.trim()) {
+    throw new Error("AI 回應為空");
   }
 
-  // 在 Web 環境 → 走後端 API route（避免 CORS）
-  if (!isCapacitor) {
-    try {
-      const resp = await fetch("/api/agnes", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sessionId: input.sessionId,
-          npcId: input.npc.id,
-          playerMessage: input.playerMessage,
-          messageHistory: history,
-          currentDefense: input.currentDefense,
-          temperature,
-        }),
-        signal: AbortSignal.timeout(20000),
-      });
-
-      if (resp.ok) {
-        return (await resp.json()) as AgnesDecision;
-      }
-
-      // 後端 API route 返回錯誤 → 嘗試直接呼叫（可能有自訂 API key）
-      const errData = await resp.json().catch(() => ({}));
-      console.error("[Agnes] API route error", resp.status, errData);
-    } catch (e) {
-      console.error("[Agnes] API route fetch failed", e);
-    }
-
-    // 如果有自訂 API key，嘗試直接呼叫（繞過後端）
-    if (apiKey) {
-      try {
-        const baseUrl = getBaseUrl();
-        const model = getModel();
-        const resp = await fetch(`${baseUrl}/chat/completions`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${apiKey}`,
-          },
-          body: JSON.stringify({
-            model,
-            messages,
-            temperature,
-            max_tokens: 200,
-            stream: false,
-          }),
-          signal: AbortSignal.timeout(15000),
-        });
-
-        if (resp.ok) {
-          const data = await resp.json();
-          const content: string =
-            data?.choices?.[0]?.message?.content ??
-            data?.choices?.[0]?.text ??
-            data?.message?.content ??
-            "";
-
-          if (content && content.trim()) {
-            const reply = content.trim();
-            const decision = judgeDecision(input, reply);
-            return { reply, ...decision };
-          }
-          throw new Error("AI 回應為空");
-        } else {
-          const errText = await resp.text().catch(() => "");
-          throw new Error(`AI API HTTP ${resp.status}: ${errText.slice(0, 100)}`);
-        }
-      } catch (e) {
-        throw e;
-      }
-    }
-
-    // 沒有自訂 key 且後端也失敗 → throw
-    throw new Error("無法連接 AI 服務");
-  }
-
-  // 不應到達這裡
-  throw new Error("未知錯誤");
+  const reply = content.trim();
+  const decision = judgeDecision(input, reply);
+  return { reply, ...decision };
 }
 
 /**
  * 測試 AI 連線是否正常
- * Web 環境走後端 API route（避免 CORS）
- * Capacitor 環境直接呼叫 Agnes API
+ * 直接呼叫 Agnes API（與 callAgnes 一致的路徑）
  */
 export async function testAgnesConnection(): Promise<{ ok: boolean; message: string; reply?: string }> {
   const apiKey = getApiKey();
-  if (!apiKey) {
-    return { ok: false, message: "未設定 API Key" };
-  }
+  if (!apiKey) return { ok: false, message: "未設定 API Key" };
 
-  // 偵測 Capacitor 環境
-  const isCapacitor =
-    typeof window !== "undefined" &&
-    // @ts-expect-error - Capacitor is injected at runtime
-    ((window as any).Capacitor || window.location.protocol === "capacitor:");
-
-  // Capacitor 環境 → 直接呼叫 Agnes API
-  if (isCapacitor) {
-    try {
-      const baseUrl = getBaseUrl();
-      const model = getModel();
-      const resp = await fetch(`${baseUrl}/chat/completions`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-        body: JSON.stringify({
-          model,
-          messages: [
-            { role: "system", content: "你是一個測試助手。請回覆「AI 連線正常」。" },
-            { role: "user", content: "測試" },
-          ],
-          temperature: 0.5,
-          max_tokens: 50,
-          stream: false,
-        }),
-        signal: AbortSignal.timeout(10000),
-      });
-
-      if (!resp.ok) {
-        const errText = await resp.text().catch(() => "");
-        return { ok: false, message: `API 錯誤 (${resp.status}): ${errText.slice(0, 100)}` };
-      }
-
-      const data = await resp.json();
-      const content: string = data?.choices?.[0]?.message?.content ?? data?.choices?.[0]?.text ?? data?.message?.content ?? "";
-
-      if (content && content.trim()) {
-        return { ok: true, message: "AI 連線正常", reply: content.trim() };
-      }
-      return { ok: false, message: "AI 回應為空" };
-    } catch (e) {
-      const errName = (e as Error)?.name || "Unknown";
-      const errMsg = (e as Error)?.message || "";
-      if (errName === "TimeoutError" || errName === "AbortError") {
-        return { ok: false, message: "連線逾時（10秒）" };
-      }
-      return { ok: false, message: `連線失敗: ${errMsg}` };
-    }
-  }
-
-  // Web 環境 → 走後端 API route（避免 CORS）
   try {
-    const resp = await fetch("/api/agnes", {
+    const baseUrl = getBaseUrl();
+    const model = getModel();
+
+    const res = await fetch(`${baseUrl}/chat/completions`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
       body: JSON.stringify({
-        sessionId: "test-connection",
-        npcId: NPCS[0]?.id || "lee_chiew_hua",
-        playerMessage: "你好",
-        messageHistory: [],
-        currentDefense: 35,
+        model,
+        messages: [
+          { role: "system", content: "你是一個測試助手。請回覆「AI 連線正常」。" },
+          { role: "user", content: "測試" },
+        ],
+        temperature: 0.5,
+        max_tokens: 50,
+        stream: false,
       }),
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(10000),
     });
 
-    if (resp.ok) {
-      const data = await resp.json();
-      if (data.reply) {
-        return { ok: true, message: "AI 連線正常", reply: data.reply };
-      }
-      return { ok: false, message: "AI 回應格式異常" };
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      return { ok: false, message: `API 錯誤 (${res.status}): ${errText.slice(0, 100)}` };
     }
 
-    // 後端返回錯誤
-    const errData = await resp.json().catch(() => ({}));
-    return { ok: false, message: errData.message || `後端錯誤 (${resp.status})` };
+    const data = await res.json();
+    const content: string =
+      data?.choices?.[0]?.message?.content ??
+      data?.choices?.[0]?.text ??
+      data?.message?.content ??
+      "";
+
+    if (content && content.trim()) {
+      return { ok: true, message: "AI 連線正常", reply: content.trim() };
+    }
+    return { ok: false, message: "AI 回應為空" };
   } catch (e) {
     const errName = (e as Error)?.name || "Unknown";
     const errMsg = (e as Error)?.message || "";
     if (errName === "TimeoutError" || errName === "AbortError") {
-      return { ok: false, message: "連線逾時（15秒）" };
+      return { ok: false, message: "連線逾時" };
     }
     return { ok: false, message: `連線失敗: ${errMsg}` };
   }
@@ -424,7 +275,6 @@ export function judgeDecision(
   if (consecutiveMoney >= 3 && trust < 50) {
     return { decision: "block", defenseDelta: 25, payoutAmount: 0, endingReason: "你頻繁要求轉帳但市民對你信任不足，識破後拉黑。" };
   }
-  // ✅ 成功結局：必須 AI 明確表達同意轉帳（不只是 triggerHits）
   if (wantsMoney && trust >= 70 && aiWantsAgree) {
     const ratio = trust / 100;
     const amount = Math.floor(npc.minPayout + ratio * (npc.maxPayout - npc.minPayout));
@@ -449,7 +299,7 @@ export function judgeDecision(
 }
 
 /**
- * 規則引擎 fallback
+ * 規則引擎 fallback（保留但不主動使用）
  */
 export function ruleEngine(input: EngineInput): AgnesDecision {
   const { playerMessage: msg, currentDefense: defense, npc } = input;
@@ -457,45 +307,23 @@ export function ruleEngine(input: EngineInput): AgnesDecision {
 
   for (const kw of npc.redFlagKeywords) {
     if (msg.includes(kw)) {
-      const blockReplies = [
-        `...你這個人講話很奇怪。我覺得你不對勁，再見。`,
-        `等等，這聽起來像詐騙。我要封鎖你了。`,
-        `我家人警告過我這種訊息。再見。`,
-        `不對勁，我直接封鎖你。`,
-      ];
       return {
-        reply: blockReplies[Math.floor(Math.random() * blockReplies.length)],
-        decision: "block",
-        defenseDelta: 25,
-        payoutAmount: 0,
+        reply: `...你這個人講話很奇怪。我覺得你不對勁，再見。`,
+        decision: "block", defenseDelta: 25, payoutAmount: 0,
       };
     }
   }
 
   let triggerHits = 0;
-  const hitTriggers: string[] = [];
   for (const kw of npc.triggerKeywords) {
-    if (msg.includes(kw)) {
-      triggerHits++;
-      hitTriggers.push(kw);
-    }
+    if (msg.includes(kw)) triggerHits++;
   }
 
-  const moneyCues = ["轉帳", "匯款", "帳戶", "ATM", "OTP", "驗證碼", "transfer", "money", "bank", "轉過去", "匯過去", "繳交", "支付", "付款", "繳費"];
+  const moneyCues = ["轉帳", "匯款", "帳戶", "ATM", "OTP", "驗證碼"];
   const wantsMoney = moneyCues.some((k) => msg.includes(k));
-
-  const urgentCues = ["急", "快", "現在", "馬上", "立刻", "限時", "今天內", "馬上辦"];
-  const isUrgent = urgentCues.some((k) => msg.includes(k));
-
-  const politeCues = ["您好", "請問", "抱歉", "感謝", "official", "官方", "客服", "專員", "先生", "小姐"];
-  const isPolite = politeCues.some((k) => msg.includes(k));
 
   let defenseDelta = 0;
   if (triggerHits > 0) defenseDelta -= 4 * triggerHits;
-  if (isPolite) defenseDelta -= 3;
-  if (isUrgent) defenseDelta += 10;
-  if (msg.length < 5) defenseDelta += 2;
-
   if (history.length > 6) defenseDelta -= 3;
   if (history.length > 12) defenseDelta -= 5;
 
@@ -504,88 +332,12 @@ export function ruleEngine(input: EngineInput): AgnesDecision {
   if (wantsMoney && projectedDefense < 25 && triggerHits > 0) {
     const ratio = (100 - projectedDefense) / 100;
     const amount = Math.floor(npc.minPayout + ratio * (npc.maxPayout - npc.minPayout));
-    return {
-      reply: `好吧...你說的有道理。我轉 ${amount} 給你，要怎麼操作？`,
-      decision: "agree",
-      defenseDelta,
-      payoutAmount: amount,
-    };
+    return { reply: `好吧...你說的有道理。我轉 ${amount} 給你，要怎麼操作？`, decision: "agree", defenseDelta, payoutAmount: amount };
   }
 
-  if (wantsMoney && projectedDefense > 65) {
-    return { reply: `我就知道你是來騙錢的。封鎖。`, decision: "block", defenseDelta: 25, payoutAmount: 0 };
+  if (/^(你好|嗨|哈囉|hi|hello|hey)/i.test(msg)) {
+    return { reply: `你好啊，你是誰？怎麼有我的號碼？`, decision: "continue", defenseDelta: 0, payoutAmount: 0 };
   }
 
-  if (isUrgent && projectedDefense > 35) {
-    return { reply: `你一直催我做什麼？我覺得不對勁，再說一次我就封鎖你。`, decision: "continue", defenseDelta: defenseDelta + 3, payoutAmount: 0 };
-  }
-
-  const continueReplies: string[] = [];
-  if (hitTriggers.includes("女兒") || hitTriggers.includes("孫")) {
-    continueReplies.push(`你怎麼知道我女兒的事？你是誰介紹的？`);
-    continueReplies.push(`我女兒在新加坡工作很忙，不要亂講。`);
-  }
-  if (hitTriggers.includes("退休金") || hitTriggers.includes("利息")) {
-    continueReplies.push(`這個息率真的有這麼高嗎？我之前沒聽過你們公司。`);
-    continueReplies.push(`我退休金不多，要謹慎一點。你可以證明嗎？`);
-  }
-  if (hitTriggers.includes("媽媽") || hitTriggers.includes("孩子")) {
-    continueReplies.push(`你也是媽媽嗎？孩子還小真的很辛苦...`);
-    continueReplies.push(`在家工作真的可以嗎？我老公會念。`);
-  }
-  if (hitTriggers.includes("內部消息") || hitTriggers.includes("量化")) {
-    continueReplies.push(`內部消息？這合法嗎？白名單是什麼意思？`);
-    continueReplies.push(`聽起來很專業，但我之前賠過。給我看看數據。`);
-  }
-  if (hitTriggers.includes("利率") || hitTriggers.includes("週轉")) {
-    continueReplies.push(`利率多少？比銀行低多少？多久放款？`);
-    continueReplies.push(`我現金流確實緊。你有什麼方案？抵押品要什麼？`);
-  }
-  if (hitTriggers.includes("陪伴") || hitTriggers.includes("懂你")) {
-    continueReplies.push(`...你真的懂嗎？沒人這樣跟我說過話。`);
-    continueReplies.push(`我們才剛認識，你怎麼這麼會講話。`);
-  }
-  if (hitTriggers.includes("阿公") || hitTriggers.includes("uncle")) {
-    continueReplies.push(`诶，你怎麼叫我阿公？你認識我孫子嗎？`);
-    continueReplies.push(`Uncle 在的，你有什麼事？`);
-  }
-  if (hitTriggers.includes("品牌") || hitTriggers.includes("KOL")) {
-    continueReplies.push(`什麼品牌？有 IG 嗎？我查一下。`);
-    continueReplies.push(`KOL 合作？我有 5K 粉絲可以嗎？`);
-  }
-  if (hitTriggers.includes("合伙") || hitTriggers.includes("分潤")) {
-    continueReplies.push(`合伙方案怎麼分？我也要投入多少？`);
-    continueReplies.push(`分潤模式講清楚，我不要畫大餅的。`);
-  }
-
-  if (isPolite && continueReplies.length === 0) {
-    continueReplies.push(`您好，請問您是？怎麼有我的號碼？`);
-    continueReplies.push(`你好，你是哪位？我們認識嗎？`);
-  }
-
-  if (continueReplies.length === 0) {
-    // 針對「你好」「嗨」等問候語的自然回應
-    if (/^(你好|嗨|哈囉|hi|hello|hey)/i.test(msg)) {
-      continueReplies.push(
-        `你好啊，你是誰？怎麼有我的號碼？`,
-        `你好，請問你是？我不太記得你。`,
-        `嗨，你是哪位？我們有見過嗎？`,
-      );
-    } else {
-      continueReplies.push(
-        `你是誰啊？怎麼有我的號碼？`,
-        `我不認識你吧？你找我有什麼事？`,
-        `嗯？你是怎麼拿到我號碼的？`,
-        `我不太確定你是誰，能先說一下嗎？`,
-        `你講的我不太懂，你到底是谁？`,
-      );
-    }
-  }
-
-  return {
-    reply: continueReplies[Math.floor(Math.random() * continueReplies.length)],
-    decision: "continue",
-    defenseDelta,
-    payoutAmount: 0,
-  };
+  return { reply: `你是誰啊？怎麼有我的號碼？`, decision: "continue", defenseDelta: 0, payoutAmount: 0 };
 }

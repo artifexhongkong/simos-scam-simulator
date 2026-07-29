@@ -52,6 +52,7 @@ export function ChatWindow({ npc, onBack }: { npc: NpcProfile; onBack: () => voi
   const [showNpcInfo, setShowNpcInfo] = useState(false);
   const [hasReset, setHasReset] = useState(false);
   const [failedMessages, setFailedMessages] = useState<Set<string>>(new Set());
+  const [aiVerified, setAiVerified] = useState(false); // 第一次成功後設為 true，之後不再驗證
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -219,6 +220,9 @@ export function ChatWindow({ npc, onBack }: { npc: NpcProfile; onBack: () => voi
         turns: updatedConv.turns,
       });
 
+      // AI 連線成功 → 標記為已驗證，之後不再驗證
+      setAiVerified(true);
+
       if (data.defenseDelta) {
         updateDefense(npc.id, data.defenseDelta);
       }
@@ -270,8 +274,20 @@ export function ChatWindow({ npc, onBack }: { npc: NpcProfile; onBack: () => voi
       }
     } catch (e) {
       console.error("[ChatWindow] callAgnes failed:", e);
-      // AI 連線失敗：標記玩家訊息為發送失敗，NPC 不發送任何內容
-      setFailedMessages(prev => new Set(prev).add(playerMsg.id));
+      // 只有在尚未驗證通過時才顯示「發送失敗」
+      // 已驗證通過後的臨時失敗不顯示（避免打擾玩家對話流暢度）
+      if (!aiVerified) {
+        setFailedMessages(prev => new Set(prev).add(playerMsg.id));
+      } else {
+        // 已驗證但臨時失敗 → 顯示系統提示但不阻斷
+        const errMsg: ChatMessage = {
+          id: genId(),
+          role: "system",
+          content: "⚠ 訊息發送延遲，請稍候再試。",
+          ts: Date.now(),
+        };
+        appendMessage(npc.id, errMsg);
+      }
     } finally {
       setThinking(false);
       setTimeout(() => inputRef.current?.focus(), 100);
@@ -279,9 +295,11 @@ export function ChatWindow({ npc, onBack }: { npc: NpcProfile; onBack: () => voi
   };
 
   const handleReset = () => {
-    if (hasReset) return; // 只允許一次
+    if (hasReset) return;
     resetConversation(npc.id);
     setHasReset(true);
+    setAiVerified(false); // 重置後重新需要驗證
+    setFailedMessages(new Set()); // 清除失敗標記
     setShowResetConfirm(false);
     setShowEnding(false);
     setThinking(false);

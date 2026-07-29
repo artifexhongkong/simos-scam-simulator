@@ -227,7 +227,7 @@ export function ChatWindow({ npc, onBack }: { npc: NpcProfile; onBack: () => voi
         updateDefense(npc.id, data.defenseDelta);
       }
 
-      await new Promise((r) => setTimeout(r, 300 + Math.random() * 400));
+      // 不再有人工延遲 — AI 回應後立即顯示
 
       const npcMsg: ChatMessage = {
         id: genId(),

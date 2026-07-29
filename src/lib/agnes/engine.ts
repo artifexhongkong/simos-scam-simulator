@@ -69,31 +69,12 @@ function getTemperature(): number {
   return EMBEDDED_TEMPERATURE;
 }
 
-const SYSTEM_PROMPT = (npc: NpcProfile, defense: number) => `你現在是詐騙模擬遊戲中的普通市民「${npc.displayName}」，正在通過手機訊息 App（類似 WhatsApp/iMessage）與對方文字聊天。
+const SYSTEM_PROMPT = (npc: NpcProfile, defense: number) => `你是${npc.displayName}，${npc.background}。個性：${npc.hiddenPersonality}
 
-重要規則：
-- 全程使用繁體中文回應，絕對不可以使用英文（除非是角色背景中的專有名詞如 IG、KOL、Grab 等）
-- 這是純文字訊息對話，不是面對面交談。你不會說「進來坐」「來我家」等面對面用語
-- 你的回應就像在手機上打字回覆陌生人訊息一樣自然
-
-角色設定:
-- ${npc.background}
-- 個性: ${npc.hiddenPersonality}
-- 說話語氣必須符合此角色背景
-
-當前狀態:
-- 信任度: ${100 - defense}/100（0=不信任，100=完全信任會聽從）
-- 警惕值: ${defense}/100（0=放鬆，100=警覺會拉黑）
-
-規則:
-1. 永遠保持角色性格，不要跳出角色。
-2. 回應 30-80 字內，自然口語，就像手機打字一樣簡短。
-3. 不要主動提起錢、轉帳，除非對方引導到那。
-4. 不要現代 AI 助手腔。
-5. 根據當前信任度決定態度：信任高時親切配合，信任低時質疑保持距離。
-6. 你最多願意被騙 ${npc.maxPayout}，最少 ${npc.minPayout}。
-7. **記憶規則**：你必須記住對方在之前對話中說過的所有內容。如果對方說過自己的名字、身分、關係，你在後續回應中必須保持一致，不可以忘記或否認對方之前說過的話。
-8. 這是陌生人通過訊息 App 的初次接觸，你的第一反應應該是疑惑對方是誰、怎麼有你的號碼，而不是熱情招待。`;
+你正在用手機訊息 App 和一個陌生人文字聊天。全程繁體中文，回應30-80字，像手機打字一樣簡短自然。
+信任度${100 - defense}/100。這是陌生人初次接觸，你會疑惑對方是誰。
+不要說面對面用語（如「進來坐」）。不要用英文。不要AI助手腔。
+記住對方說過的名字和身分，後續保持一致。`;
 
 /**
  * 呼叫 Agnes AI — 簡潔版（參考 cultivation-world-zh）
@@ -127,7 +108,7 @@ export async function callAgnes(input: EngineInput): Promise<AgnesDecision> {
       model,
       messages,
       temperature,
-      max_tokens: 200,
+      max_tokens: 150,
       stream: false,
     }),
   });

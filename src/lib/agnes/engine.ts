@@ -436,21 +436,27 @@ export function ruleEngine(input: EngineInput): AgnesDecision {
   }
 
   if (isPolite && continueReplies.length === 0) {
-    continueReplies.push(`您好，請問您是？怎麼有我的聯絡方式？`);
-    continueReplies.push(`抱歉，我不太認識你。你要做什麼？`);
+    continueReplies.push(`您好，請問您是？怎麼有我的號碼？`);
+    continueReplies.push(`你好，你是哪位？我們認識嗎？`);
   }
 
   if (continueReplies.length === 0) {
-    continueReplies.push(
-      `嗯...你說的我不太懂，可以再解釋一下嗎？`,
-      `我考慮一下，畢竟我不太認識你。`,
-      `你怎麼會有我的聯絡方式？`,
-      `聽起來有點道理，但我要先問我家人。`,
-      `我不確定耶，你能不能證明一下你說的是真的？`,
-      `好啦，你繼續說。`,
-      `我之前沒聽過這種事。`,
-      `你講太快了，我聽不懂。慢慢說。`,
-    );
+    // 針對「你好」「嗨」等問候語的自然回應
+    if (/^(你好|嗨|哈囉|hi|hello|hey)/i.test(msg)) {
+      continueReplies.push(
+        `你好啊，你是誰？怎麼有我的號碼？`,
+        `你好，請問你是？我不太記得你。`,
+        `嗨，你是哪位？我們有見過嗎？`,
+      );
+    } else {
+      continueReplies.push(
+        `你是誰啊？怎麼有我的號碼？`,
+        `我不認識你吧？你找我有什麼事？`,
+        `嗯？你是怎麼拿到我號碼的？`,
+        `我不太確定你是誰，能先說一下嗎？`,
+        `你講的我不太懂，你到底是谁？`,
+      );
+    }
   }
 
   return {

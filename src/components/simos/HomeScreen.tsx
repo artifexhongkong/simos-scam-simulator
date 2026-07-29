@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { MessageCircle, Skull, Trophy, Settings as SettingsIcon, Coins, Wifi, ShieldAlert, Phone, Compass } from "lucide-react";
+import { MessageCircle, Skull, Trophy, Settings as SettingsIcon, Coins, Wifi, ShieldAlert, Phone, Compass, Mail } from "lucide-react";
 import type { AppName } from "./SimOS";
 import { useGameStore } from "@/lib/game/store";
 
@@ -80,7 +80,7 @@ export function HomeScreen({ onOpenApp }: { onOpenApp: (app: AppName) => void })
     {
       key: "messages",
       label: "訊息",
-      icon: <MessageCircle className="w-6 h-6 text-white" strokeWidth={2} fill="white" />,
+      icon: <Mail className="w-6 h-6 text-white" strokeWidth={2} fill="white" />,
       bg: "linear-gradient(135deg, #5ac8fa 0%, #007aff 100%)",
     },
     {

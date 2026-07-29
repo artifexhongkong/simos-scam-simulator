@@ -50,6 +50,7 @@ export function ChatWindow({ npc, onBack }: { npc: NpcProfile; onBack: () => voi
   const [showQuickPhrases, setShowQuickPhrases] = useState(false);
   const [showImageMaterials, setShowImageMaterials] = useState(false);
   const [showNpcInfo, setShowNpcInfo] = useState(false);
+  const [hasReset, setHasReset] = useState(false); // 重新開始只允許一次
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -155,6 +156,18 @@ export function ChatWindow({ npc, onBack }: { npc: NpcProfile; onBack: () => voi
       appendMessage(npc.id, blockMsg);
       setConversationStatus(npc.id, "blocked", undefined, "流量耗盡，號碼被封鎖。");
       return;
+    }
+
+    // 流量低於 500MB 時發送警告通知
+    const remainingTraffic = useGameStore.getState().dataTraffic;
+    if (remainingTraffic <= 500 && remainingTraffic > 0) {
+      const warnMsg: ChatMessage = {
+        id: genId(),
+        role: "system",
+        content: `⚠ 流量警告：剩餘 ${(remainingTraffic / 1000).toFixed(1)} GB，號碼即將被封鎖！`,
+        ts: Date.now(),
+      };
+      appendMessage(npc.id, warnMsg);
     }
 
     setInput("");
@@ -270,7 +283,9 @@ export function ChatWindow({ npc, onBack }: { npc: NpcProfile; onBack: () => voi
   };
 
   const handleReset = () => {
+    if (hasReset) return; // 只允許一次
     resetConversation(npc.id);
+    setHasReset(true);
     setShowResetConfirm(false);
     setShowEnding(false);
     setThinking(false);
@@ -372,15 +387,17 @@ export function ChatWindow({ npc, onBack }: { npc: NpcProfile; onBack: () => voi
           >
             <Download className="w-5 h-5" />
           </button>
-          <button
-            onClick={() => setShowResetConfirm(true)}
-            className="p-1.5 rounded-full active:opacity-50 transition"
-            style={{ color: "var(--im-link-text)" }}
-            aria-label="重新開始"
-            title="重新開始對話"
-          >
-            <RotateCcw className="w-5 h-5" />
-          </button>
+          {!hasReset && (
+            <button
+              onClick={() => setShowResetConfirm(true)}
+              className="p-1.5 rounded-full active:opacity-50 transition"
+              style={{ color: "var(--im-link-text)" }}
+              aria-label="重新開始"
+              title="重新開始對話（僅限一次）"
+            >
+              <RotateCcw className="w-5 h-5" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -622,6 +639,7 @@ export function ChatWindow({ npc, onBack }: { npc: NpcProfile; onBack: () => voi
             conv={conv}
             onClose={() => setShowEnding(false)}
             onReset={handleReset}
+            hasReset={hasReset}
           />
         )}
       </AnimatePresence>

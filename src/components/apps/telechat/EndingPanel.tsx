@@ -10,9 +10,10 @@ interface EndingPanelProps {
   conv: ConversationState;
   onClose: () => void;
   onReset: () => void;
+  hasReset?: boolean;
 }
 
-export function EndingPanel({ npc, conv, onClose, onReset }: EndingPanelProps) {
+export function EndingPanel({ npc, conv, onClose, onReset, hasReset }: EndingPanelProps) {
   const isSuccess = conv.status === "succeeded";
   const isBlocked = conv.status === "blocked";
   const isCautious = conv.status === "cautious";
@@ -187,12 +188,14 @@ export function EndingPanel({ npc, conv, onClose, onReset }: EndingPanelProps) {
           >
             關閉
           </button>
-          <button
-            onClick={onReset}
-            className="flex-1 py-2.5 rounded-xl bg-blue-500 text-white text-sm font-semibold hover:bg-blue-600 active:scale-95 transition flex items-center justify-center gap-1.5"
-          >
-            <RotateCcw className="w-3.5 h-3.5" /> 再騙一次
-          </button>
+          {!hasReset && (
+            <button
+              onClick={onReset}
+              className="flex-1 py-2.5 rounded-xl bg-blue-500 text-white text-sm font-semibold hover:bg-blue-600 active:scale-95 transition flex items-center justify-center gap-1.5"
+            >
+              <RotateCcw className="w-3.5 h-3.5" /> 再騙一次
+            </button>
+          )}
         </div>
       </motion.div>
     </motion.div>

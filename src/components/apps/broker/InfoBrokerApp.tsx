@@ -75,7 +75,7 @@ export function InfoBrokerApp({ onBack }: { onBack: () => void }) {
             <div className="p-3 space-y-2">
               <p className="text-[11px] font-semibold" style={{ color: textSub }}>補給站</p>
               <button
-                onClick={() => { if (darkCoin >= 30) { addTraffic(20); useGameStore.setState((s) => ({ darkCoin: s.darkCoin - 30 })); } }}
+                onClick={() => { if (darkCoin >= 30) { addTraffic(2000); useGameStore.setState((s) => ({ darkCoin: s.darkCoin - 30 })); } }}
                 disabled={darkCoin < 30}
                 className="w-full flex items-center justify-between p-2.5 rounded-lg active:scale-95 transition disabled:opacity-40"
                 style={{ background: cardBg }}
@@ -83,7 +83,7 @@ export function InfoBrokerApp({ onBack }: { onBack: () => void }) {
                 <div className="flex items-center gap-2">
                   <Zap className="w-4 h-4" style={{ color: "#5ac8fa" }} />
                   <div className="text-left">
-                    <p className="text-xs font-medium" style={{ color: textMain }}>免洗 SIM 卡（+20GB）</p>
+                    <p className="text-xs font-medium" style={{ color: textMain }}>免洗 SIM 卡（+2GB）</p>
                     <p className="text-[10px]" style={{ color: textSub }}>補充流量，避免號碼被封</p>
                   </div>
                 </div>

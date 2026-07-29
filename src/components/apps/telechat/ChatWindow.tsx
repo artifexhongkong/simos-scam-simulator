@@ -37,6 +37,8 @@ export function ChatWindow({ npc, onBack }: { npc: NpcProfile; onBack: () => voi
   const setConversationStatus = useGameStore((s) => s.setConversationStatus);
   const updateConversationMetrics = useGameStore((s) => s.updateConversationMetrics);
   const resetConversation = useGameStore((s) => s.resetConversation);
+  const consumeTraffic = useGameStore((s) => s.consumeTraffic);
+  const dataTraffic = useGameStore((s) => s.dataTraffic);
   const theme = useGameStore((s) => s.theme);
   const showTimestamps = useGameStore((s) => s.showTimestamps);
 
@@ -138,6 +140,21 @@ export function ChatWindow({ npc, onBack }: { npc: NpcProfile; onBack: () => voi
     if (thinking) return;
     const latestConv = useGameStore.getState().conversations[npc.id];
     if (!latestConv || latestConv.status !== "active") return;
+
+    // 流量檢查：每則訊息消耗 100MB
+    const TRAFFIC_PER_MSG = 100;
+    if (!consumeTraffic(TRAFFIC_PER_MSG)) {
+      // 流量不足，號碼被封
+      const blockMsg: ChatMessage = {
+        id: genId(),
+        role: "system",
+        content: "⚠ 流量耗盡！此號碼已被電信商封鎖，對話強制中斷。請至情報販子補給站購買免洗 SIM 卡。",
+        ts: Date.now(),
+      };
+      appendMessage(npc.id, blockMsg);
+      setConversationStatus(npc.id, "blocked", undefined, "流量耗盡，號碼被封鎖。");
+      return;
+    }
 
     setInput("");
     setShowQuickPhrases(false);

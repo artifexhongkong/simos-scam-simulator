@@ -335,7 +335,7 @@ export function SettingsApp({ onBack }: SettingsAppProps) {
             <div className="grid grid-cols-2 gap-2">
               <Stat label="總騙金額" value={`$${scamScore.toLocaleString()}`} color="text-amber-500" />
               <Stat label="暗網幣" value={`${darkCoin} DRC`} color="text-purple-500" />
-              <Stat label="流量卡" value={`${dataTraffic} GB`} color="text-blue-500" />
+              <Stat label="流量卡" value={`${(dataTraffic / 1000).toFixed(1)} GB`} color="text-blue-500" />
               <Stat label="風控值" value={`${riskLevel}/100`} color={riskLevel > 60 ? "text-red-500" : riskLevel > 30 ? "text-orange-500" : "text-emerald-500"} />
             </div>
           </Section>

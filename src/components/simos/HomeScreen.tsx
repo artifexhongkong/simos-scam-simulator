@@ -153,8 +153,8 @@ export function HomeScreen({ onOpenApp }: { onOpenApp: (app: AppName) => void })
               </div>
               {/* 流量卡 */}
               <div className="flex items-center gap-1 px-1.5 py-1 rounded-lg" style={{ background: theme === "dark" ? "rgba(28,28,30,0.6)" : "rgba(0,0,0,0.04)" }}>
-                <Wifi className="w-3 h-3" style={{ color: dataTraffic < 10 ? "#ff3b30" : "#5ac8fa" }} />
-                <span className="text-[10px] font-semibold" style={{ color: dataTraffic < 10 ? "#ff3b30" : "#5ac8fa" }}>{dataTraffic}</span>
+                <Wifi className="w-3 h-3" style={{ color: dataTraffic < 500 ? "#ff3b30" : "#5ac8fa" }} />
+                <span className="text-[10px] font-semibold" style={{ color: dataTraffic < 500 ? "#ff3b30" : "#5ac8fa" }}>{(dataTraffic / 1000).toFixed(1)}</span>
                 <span className="text-[8px]" style={{ color: textSub }}>GB</span>
               </div>
               {/* 風控值 */}

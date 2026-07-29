@@ -84,9 +84,9 @@ export interface GameState {
   resetGame: () => void;
 }
 
-const INITIAL_DARK_COIN = 200;   // 初始暗網幣（夠買 2~3 個 NPC）
-const INITIAL_TRAFFIC = 50;      // 初始流量卡 50GB
-const INITIAL_RISK = 0;          // 初始風控值
+const INITIAL_DARK_COIN = 200;
+const INITIAL_TRAFFIC = 5000;     // 5000 MB = 5GB（每則訊息扣 100MB）
+const INITIAL_RISK = 0;
 
 function genId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);

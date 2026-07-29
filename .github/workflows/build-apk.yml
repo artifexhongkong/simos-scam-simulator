@@ -199,12 +199,16 @@ jobs:
 
           ./gradlew assembleDebug --no-daemon -x lint
 
-      - name: Sign APK with fixed debug keystore (consistent across builds)
-        run: |
-          APK=android/app/build/outputs/apk/debug/app-debug.apk
+      - name: Restore keystore from cache
+        id: keystore-cache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/simos-debug.keystore
+          key: simos-debug-keystore-v1
 
-          # 生成固定的 debug keystore（每次用相同參數，確保簽名一致）
-          # 這樣每次 build 的 APK 簽名都相同，可以正常升級安裝
+      - name: Generate keystore (only if not cached)
+        if: steps.keystore-cache.outputs.cache-hit != 'true'
+        run: |
           keytool -genkeypair -v \
             -keystore /tmp/simos-debug.keystore \
             -alias simos-debug \
@@ -215,7 +219,9 @@ jobs:
             -keypass simos123 \
             -dname "CN=SimOS Debug, OU=Dev, O=SimOS, L=HK, ST=HK, C=HK"
 
-          # 用固定 keystore 簽名 APK
+      - name: Sign APK with cached keystore
+        run: |
+          APK=android/app/build/outputs/apk/debug/app-debug.apk
           $ANDROID_HOME/build-tools/34.0.0/apksigner sign \
             --ks /tmp/simos-debug.keystore \
             --ks-pass pass:simos123 \
@@ -224,7 +230,7 @@ jobs:
             --out /tmp/app-signed.apk \
             "$APK"
           cp /tmp/app-signed.apk "$APK"
-          echo "APK signed with fixed debug keystore (consistent across all builds)"
+          echo "APK signed with cached keystore (consistent across all builds)"
 
       - name: Determine version & rename APK
         id: version

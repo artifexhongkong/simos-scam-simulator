@@ -165,17 +165,23 @@ export async function callAgnes(input: EngineInput): Promise<AgnesDecision> {
           console.debug("[Agnes] judged", decision);
           return { reply, ...decision };
         }
+        // AI 回應為空 → throw error
+        throw new Error("AI 回應為空");
       } else {
         const errText = await resp.text().catch(() => "");
         console.error("[Agnes] HTTP error", resp.status, errText.slice(0, 200));
+        // HTTP 錯誤 → throw error（不 fallback 到 ruleEngine）
+        throw new Error(`AI API HTTP ${resp.status}: ${errText.slice(0, 100)}`);
       }
     } catch (e) {
       console.error("[Agnes] fetch failed", e);
+      // 網路失敗 → throw error（不 fallback 到 ruleEngine）
+      throw e;
     }
   }
 
-  await new Promise((r) => setTimeout(r, 400 + Math.random() * 400));
-  return ruleEngine(input);
+  // 沒有 API key → throw error
+  throw new Error("未設定 API Key");
 }
 
 /**
@@ -239,7 +245,7 @@ export async function testAgnesConnection(): Promise<{ ok: boolean; message: str
 /**
  * 從玩家訊息 + AI 回應判定 decision
  */
-function judgeDecision(
+export function judgeDecision(
   input: EngineInput,
   aiReply: string,
 ): { decision: AgnesDecision["decision"]; defenseDelta: number; payoutAmount?: number; endingReason?: string } {

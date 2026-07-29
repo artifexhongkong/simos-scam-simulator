@@ -1,7 +1,7 @@
 // 共用的 Agnes AI 引擎 - 參考 cultivation-world-zh 模式
 // 簡潔的 system prompt + 最近 6 則歷史 + 適當 temperature
 
-import type { NpcProfile } from "@/lib/game/npcs";
+import { NPCS, type NpcProfile } from "@/lib/game/npcs";
 
 export interface AgnesDecision {
   reply: string;
@@ -265,6 +265,8 @@ export async function callAgnes(input: EngineInput): Promise<AgnesDecision> {
 
 /**
  * 測試 AI 連線是否正常
+ * Web 環境走後端 API route（避免 CORS）
+ * Capacitor 環境直接呼叫 Agnes API
  */
 export async function testAgnesConnection(): Promise<{ ok: boolean; message: string; reply?: string }> {
   const apiKey = getApiKey();
@@ -272,50 +274,86 @@ export async function testAgnesConnection(): Promise<{ ok: boolean; message: str
     return { ok: false, message: "未設定 API Key" };
   }
 
-  try {
-    const baseUrl = getBaseUrl();
-    const model = getModel();
+  // 偵測 Capacitor 環境
+  const isCapacitor =
+    typeof window !== "undefined" &&
+    // @ts-expect-error - Capacitor is injected at runtime
+    ((window as any).Capacitor || window.location.protocol === "capacitor:");
 
-    const resp = await fetch(`${baseUrl}/chat/completions`, {
+  // Capacitor 環境 → 直接呼叫 Agnes API
+  if (isCapacitor) {
+    try {
+      const baseUrl = getBaseUrl();
+      const model = getModel();
+      const resp = await fetch(`${baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: "system", content: "你是一個測試助手。請回覆「AI 連線正常」。" },
+            { role: "user", content: "測試" },
+          ],
+          temperature: 0.5,
+          max_tokens: 50,
+          stream: false,
+        }),
+        signal: AbortSignal.timeout(10000),
+      });
+
+      if (!resp.ok) {
+        const errText = await resp.text().catch(() => "");
+        return { ok: false, message: `API 錯誤 (${resp.status}): ${errText.slice(0, 100)}` };
+      }
+
+      const data = await resp.json();
+      const content: string = data?.choices?.[0]?.message?.content ?? data?.choices?.[0]?.text ?? data?.message?.content ?? "";
+
+      if (content && content.trim()) {
+        return { ok: true, message: "AI 連線正常", reply: content.trim() };
+      }
+      return { ok: false, message: "AI 回應為空" };
+    } catch (e) {
+      const errName = (e as Error)?.name || "Unknown";
+      const errMsg = (e as Error)?.message || "";
+      if (errName === "TimeoutError" || errName === "AbortError") {
+        return { ok: false, message: "連線逾時（10秒）" };
+      }
+      return { ok: false, message: `連線失敗: ${errMsg}` };
+    }
+  }
+
+  // Web 環境 → 走後端 API route（避免 CORS）
+  try {
+    const resp = await fetch("/api/agnes", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        model,
-        messages: [
-          { role: "system", content: "你是一個測試助手。請回覆「AI 連線正常」。" },
-          { role: "user", content: "測試" },
-        ],
-        temperature: 0.5,
-        max_tokens: 50,
-        stream: false,
+        sessionId: "test-connection",
+        npcId: NPCS[0]?.id || "lee_chiew_hua",
+        playerMessage: "你好",
+        messageHistory: [],
+        currentDefense: 35,
       }),
-      signal: AbortSignal.timeout(10000),
+      signal: AbortSignal.timeout(15000),
     });
 
-    if (!resp.ok) {
-      const errText = await resp.text().catch(() => "");
-      return { ok: false, message: `API 錯誤 (${resp.status}): ${errText.slice(0, 100)}` };
+    if (resp.ok) {
+      const data = await resp.json();
+      if (data.reply) {
+        return { ok: true, message: "AI 連線正常", reply: data.reply };
+      }
+      return { ok: false, message: "AI 回應格式異常" };
     }
 
-    const data = await resp.json();
-    const content: string =
-      data?.choices?.[0]?.message?.content ??
-      data?.choices?.[0]?.text ??
-      data?.message?.content ??
-      "";
-
-    if (content && content.trim()) {
-      return { ok: true, message: "AI 連線正常", reply: content.trim() };
-    }
-    return { ok: false, message: "AI 回應為空" };
+    // 後端返回錯誤
+    const errData = await resp.json().catch(() => ({}));
+    return { ok: false, message: errData.message || `後端錯誤 (${resp.status})` };
   } catch (e) {
     const errName = (e as Error)?.name || "Unknown";
     const errMsg = (e as Error)?.message || "";
     if (errName === "TimeoutError" || errName === "AbortError") {
-      return { ok: false, message: "連線逾時（10秒）" };
+      return { ok: false, message: "連線逾時（15秒）" };
     }
     return { ok: false, message: `連線失敗: ${errMsg}` };
   }

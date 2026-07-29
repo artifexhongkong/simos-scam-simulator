@@ -49,6 +49,7 @@ export function ChatWindow({ npc, onBack }: { npc: NpcProfile; onBack: () => voi
   const [showEnding, setShowEnding] = useState(false);
   const [showQuickPhrases, setShowQuickPhrases] = useState(false);
   const [showImageMaterials, setShowImageMaterials] = useState(false);
+  const [showNpcInfo, setShowNpcInfo] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -345,7 +346,10 @@ export function ChatWindow({ npc, onBack }: { npc: NpcProfile; onBack: () => voi
         </button>
 
         <div className="flex-1 flex flex-col items-center justify-center">
-          <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => setShowNpcInfo(true)}
+            className="flex items-center gap-1.5 active:scale-95 transition"
+          >
             <div
               className="w-7 h-7 rounded-full flex items-center justify-center text-base"
               style={{ background: "var(--im-bubble-npc-bg)" }}
@@ -355,7 +359,7 @@ export function ChatWindow({ npc, onBack }: { npc: NpcProfile; onBack: () => voi
             <span className="text-[16px] font-semibold truncate max-w-[140px]" style={{ color: "var(--im-header-text)" }}>
               {npc.displayName}
             </span>
-          </div>
+          </button>
         </div>
 
         <div className="flex items-center gap-1 w-[80px] justify-end">
@@ -620,6 +624,13 @@ export function ChatWindow({ npc, onBack }: { npc: NpcProfile; onBack: () => voi
           />
         )}
       </AnimatePresence>
+
+      {/* NPC 情報彈窗（點擊頭像觸發） */}
+      <AnimatePresence>
+        {showNpcInfo && (
+          <NpcInfoModal npc={npc} onClose={() => setShowNpcInfo(false)} />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -719,6 +730,67 @@ function MessageBubble({
           {msg.content}
         </div>
       </div>
+    </motion.div>
+  );
+}
+
+// NPC 情報彈窗（聊天室中點擊頭像查看）
+function NpcInfoModal({ npc, onClose }: { npc: NpcProfile; onClose: () => void }) {
+  const premiumNpcIds = useGameStore((s) => s.premiumNpcIds);
+  const isPremium = premiumNpcIds.includes(npc.id);
+  const textMain = "var(--im-header-text)";
+  const textSub = "var(--im-bubble-system-text)";
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onClick={onClose}
+      className="absolute inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end md:items-center justify-center p-3"
+    >
+      <motion.div
+        initial={{ y: 50, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        exit={{ y: 50, opacity: 0 }}
+        transition={{ type: "spring", stiffness: 300, damping: 30 }}
+        onClick={(e) => e.stopPropagation()}
+        className="w-full rounded-3xl border overflow-hidden max-h-[80%] flex flex-col"
+        style={{ background: "var(--im-header-bg)", borderColor: "var(--im-header-border)" }}
+      >
+        <div className="p-5 border-b" style={{ borderColor: "var(--im-header-border)" }}>
+          <div className="flex items-center gap-3">
+            <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-4xl" style={{ background: "var(--im-bubble-npc-bg)" }}>{npc.avatar}</div>
+            <div>
+              <h3 className="text-lg font-bold" style={{ color: textMain }}>{npc.displayName}</h3>
+              <p className="text-xs" style={{ color: textSub }}>年齡 {npc.age} 歲{isPremium ? " · 精準有料" : " · 普通料子"}</p>
+            </div>
+          </div>
+        </div>
+        <div className="p-5 space-y-4 overflow-y-auto scroll-safe-bottom">
+          <div>
+            <p className="text-[10px] font-medium uppercase tracking-wide mb-2" style={{ color: textSub }}>背景</p>
+            <p className="text-sm leading-relaxed" style={{ color: textMain }}>{npc.background}</p>
+          </div>
+          <div>
+            <p className="text-[10px] font-medium uppercase tracking-wide mb-2" style={{ color: textSub }}>可利用特質</p>
+            <div className="flex flex-wrap gap-1.5">
+              {npc.hookTags.map((tag) => (
+                <span key={tag} className="px-2.5 py-1 rounded-full text-[11px] font-medium" style={{ background: "rgba(255,149,0,0.1)", border: "1px solid rgba(255,149,0,0.2)", color: "#ff9500" }}>{tag}</span>
+              ))}
+            </div>
+          </div>
+          {isPremium && (
+            <div className="rounded-xl p-3" style={{ background: "rgba(255,149,0,0.08)", border: "1px solid rgba(255,149,0,0.2)" }}>
+              <p className="text-[10px] font-medium uppercase tracking-wide mb-1.5" style={{ color: "#ff9500" }}>🔓 核心痛點</p>
+              <p className="text-sm leading-relaxed" style={{ color: textMain }}>{npc.hiddenPersonality}</p>
+            </div>
+          )}
+        </div>
+        <div className="p-4 border-t" style={{ borderColor: "var(--im-header-border)" }}>
+          <button onClick={onClose} className="w-full py-3 rounded-xl text-sm font-semibold active:scale-95 transition" style={{ background: "var(--im-link-text)", color: "#fff" }}>關閉</button>
+        </div>
+      </motion.div>
     </motion.div>
   );
 }

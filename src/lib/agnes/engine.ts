@@ -298,7 +298,8 @@ function judgeDecision(
   if (consecutiveMoney >= 3 && trust < 50) {
     return { decision: "block", defenseDelta: 25, payoutAmount: 0, endingReason: "你頻繁要求轉帳但市民對你信任不足，識破後拉黑。" };
   }
-  if (wantsMoney && trust >= 70 && (aiWantsAgree || triggerHits > 0)) {
+  // ✅ 成功結局：必須 AI 明確表達同意轉帳（不只是 triggerHits）
+  if (wantsMoney && trust >= 70 && aiWantsAgree) {
     const ratio = trust / 100;
     const amount = Math.floor(npc.minPayout + ratio * (npc.maxPayout - npc.minPayout));
     return { decision: "agree", defenseDelta, payoutAmount: amount, endingReason: `成功騙取市民信任，對方願意轉帳 $${amount.toLocaleString()}。` };

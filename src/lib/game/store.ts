@@ -42,10 +42,11 @@ export interface GameState {
   uiStyle: "classic" | "ios";
 
   // 經濟系統
-  darkCoin: number;       // 暗網幣（DRC）：購買情報的貨幣
-  dataTraffic: number;    // 流量卡（GB）：每則訊息消耗 1GB
-  riskLevel: number;      // 風控值（0-100）：越高越危險
-  scamScore: number;      // 詐騙總金額（遊戲主目標，用於排行榜）
+  darkCoin: number;       // 暗網幣（DRC）
+  dataTraffic: number;    // 流量卡（MB）
+  riskLevel: number;      // 風控值（0-100）
+  scamScore: number;      // 詐騙總金額（排行榜用，不會因兌換減少）
+  convertedAmount: number; // 已洗錢兌換過的金額（追蹤避免重複）
 
   // 已購買情報的 NPC ID（含情報等級）
   unlockedNpcIds: string[];        // 普通料子已解鎖
@@ -139,6 +140,7 @@ export const useGameStore = create<GameState>()(
       dataTraffic: INITIAL_TRAFFIC,
       riskLevel: INITIAL_RISK,
       scamScore: 0,
+      convertedAmount: 0,
       unlockedNpcIds: [],
       premiumNpcIds: [],
       friendNpcIds: [],
@@ -169,9 +171,17 @@ export const useGameStore = create<GameState>()(
 
       convertScamToCoin: () => {
         const s = get();
-        const convertible = Math.floor(s.scamScore / 1000) * 10;
-        if (convertible <= 0) return;
-        set({ darkCoin: s.darkCoin + convertible });
+        // 可兌換金額 = 總騙金額 - 已兌換金額
+        const unconverted = s.scamScore - s.convertedAmount;
+        // 每 $1000 可兌換 10 DRC
+        const convertibleDRC = Math.floor(unconverted / 1000) * 10;
+        if (convertibleDRC <= 0) return;
+        // 記錄已兌換的金額
+        const newConverted = s.convertedAmount + (convertibleDRC / 10) * 1000;
+        set({
+          darkCoin: s.darkCoin + convertibleDRC,
+          convertedAmount: newConverted,
+        });
       },
 
       purchaseIntel: (npcId, premium) => {
@@ -356,6 +366,7 @@ export const useGameStore = create<GameState>()(
           dataTraffic: INITIAL_TRAFFIC,
           riskLevel: INITIAL_RISK,
           scamScore: 0,
+          convertedAmount: 0,
           unlockedNpcIds: [],
           premiumNpcIds: [],
           friendNpcIds: [],

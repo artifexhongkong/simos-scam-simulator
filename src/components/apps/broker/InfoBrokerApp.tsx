@@ -14,6 +14,7 @@ export function InfoBrokerApp({ onBack }: { onBack: () => void }) {
   const purchaseIntel = useGameStore((s) => s.purchaseIntel);
   const convertScamToCoin = useGameStore((s) => s.convertScamToCoin);
   const scamScore = useGameStore((s) => s.scamScore);
+  const convertedAmount = useGameStore((s) => s.convertedAmount);
   const addTraffic = useGameStore((s) => s.addTraffic);
   const dataTraffic = useGameStore((s) => s.dataTraffic);
 
@@ -32,7 +33,7 @@ export function InfoBrokerApp({ onBack }: { onBack: () => void }) {
     }, 600);
   };
 
-  const convertibleCoin = Math.floor(scamScore / 1000) * 10;
+  const convertibleCoin = Math.floor((scamScore - convertedAmount) / 1000) * 10;
 
   const cardBg = "var(--im-bubble-npc-bg)";
   const cardBorder = "var(--im-header-border)";

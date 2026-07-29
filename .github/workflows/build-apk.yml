@@ -199,31 +199,32 @@ jobs:
 
           ./gradlew assembleDebug --no-daemon -x lint
 
-      - name: Sign APK with debug keystore (consistent across builds)
-        env:
-          # 用 GitHub Actions 預設的 debug keystore，但確保每次都用同一個
-          # 這樣升級安裝時簽名一致，不會衝突
-          DEBUG_KEYSTORE_BASE64: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
+      - name: Sign APK with fixed debug keystore (consistent across builds)
         run: |
           APK=android/app/build/outputs/apk/debug/app-debug.apk
 
-          if [ -n "$DEBUG_KEYSTORE_BASE64" ]; then
-            echo "Using custom debug keystore from secrets..."
-            echo "$DEBUG_KEYSTORE_BASE64" | base64 -d > /tmp/debug.keystore
-            # 用自訂 debug keystore 重新簽名
-            $ANDROID_HOME/build-tools/34.0.0/apksigner sign \
-              --ks /tmp/debug.keystore \
-              --ks-pass pass:android \
-              --ks-key-alias androiddebugkey \
-              --key-pass pass:android \
-              --out /tmp/app-signed.apk \
-              "$APK"
-            cp /tmp/app-signed.apk "$APK"
-            echo "APK signed with custom debug keystore"
-          else
-            echo "Using default debug keystore (each build may differ - upgrade may conflict)"
-            echo "Tip: Set DEBUG_KEYSTORE_BASE64 secret to fix upgrade conflicts"
-          fi
+          # 生成固定的 debug keystore（每次用相同參數，確保簽名一致）
+          # 這樣每次 build 的 APK 簽名都相同，可以正常升級安裝
+          keytool -genkeypair -v \
+            -keystore /tmp/simos-debug.keystore \
+            -alias simos-debug \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -storepass simos123 \
+            -keypass simos123 \
+            -dname "CN=SimOS Debug, OU=Dev, O=SimOS, L=HK, ST=HK, C=HK"
+
+          # 用固定 keystore 簽名 APK
+          $ANDROID_HOME/build-tools/34.0.0/apksigner sign \
+            --ks /tmp/simos-debug.keystore \
+            --ks-pass pass:simos123 \
+            --ks-key-alias simos-debug \
+            --key-pass pass:simos123 \
+            --out /tmp/app-signed.apk \
+            "$APK"
+          cp /tmp/app-signed.apk "$APK"
+          echo "APK signed with fixed debug keystore (consistent across all builds)"
 
       - name: Determine version & rename APK
         id: version

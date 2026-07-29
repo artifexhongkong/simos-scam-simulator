@@ -21,7 +21,22 @@ export function TeleChatApp({ onBack }: { onBack: () => void }) {
     })),
   );
 
-  const friends = NPCS.filter((n) => friendNpcIds.includes(n.id));
+  const friends = NPCS.filter((n) => friendNpcIds.includes(n.id))
+    .sort((a, b) => {
+      // 排序規則：
+      // 1. 已詐騙成功的排最後（不移除但降序）
+      // 2. 已購買情報的（unlockedNpcIds）往上移
+      const convA = conversations[a.id];
+      const convB = conversations[b.id];
+      const aSucceeded = convA?.status === "succeeded";
+      const bSucceeded = convB?.status === "succeeded";
+      if (aSucceeded && !bSucceeded) return 1;
+      if (!aSucceeded && bSucceeded) return -1;
+      // 都不是成功的，按最近對話時間排序
+      const aTime = convA?.messages?.slice(-1)[0]?.ts ?? 0;
+      const bTime = convB?.messages?.slice(-1)[0]?.ts ?? 0;
+      return bTime - aTime;
+    });
 
   const openChat = (npcId: string) => {
     setActiveNpcId(npcId);

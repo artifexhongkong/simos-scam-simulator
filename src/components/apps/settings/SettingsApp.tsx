@@ -130,7 +130,7 @@ export function SettingsApp({ onBack }: SettingsAppProps) {
         </h2>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto">
+      <div className="flex-1 min-h-0 overflow-y-auto scroll-safe-bottom">
         {savedFlash && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}

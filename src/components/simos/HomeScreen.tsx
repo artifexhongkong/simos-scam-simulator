@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { MessageCircle, Skull, Trophy, Settings as SettingsIcon, Sparkles } from "lucide-react";
+import { MessageCircle, Skull, Trophy, Settings as SettingsIcon, Sparkles, Phone, Compass, Safari } from "lucide-react";
 import type { AppName } from "./SimOS";
 import { useGameStore } from "@/lib/game/store";
 
@@ -19,13 +19,21 @@ interface IOSAppTile {
   badge?: number;
 }
 
+// Dock 欄佔位 App（之後會加入功能）
+interface DockTile {
+  key: string;
+  label: string;
+  icon: React.ReactNode;
+  bg: string;
+}
+
 export function HomeScreen({ onOpenApp, intelPoints, scamScore }: HomeScreenProps) {
   const conversations = useGameStore((s) => s.conversations);
   const alias = useGameStore((s) => s.alias);
   const playerAvatar = useGameStore((s) => s.playerAvatar);
   const theme = useGameStore((s) => s.theme);
 
-  // 計算未讀訊息數：活躍對話中，最後一則是 NPC 訊息 = 有未讀
+  // 計算未讀訊息數
   const unreadCount = Object.values(conversations).filter((c) => {
     if (c.status !== "active") return false;
     const msgs = c.messages;
@@ -34,6 +42,7 @@ export function HomeScreen({ onOpenApp, intelPoints, scamScore }: HomeScreenProp
     return lastMsg.role === "npc";
   }).length;
 
+  // 桌面 App（遊戲核心功能）
   const apps: IOSAppTile[] = [
     {
       key: "telechat",
@@ -62,6 +71,28 @@ export function HomeScreen({ onOpenApp, intelPoints, scamScore }: HomeScreenProp
     },
   ];
 
+  // Dock 欄 App（跨分頁常用，佔位，之後加功能）
+  const dockApps: DockTile[] = [
+    {
+      key: "phone",
+      label: "電話",
+      icon: <Phone className="w-6 h-6 text-white" strokeWidth={2} fill="white" />,
+      bg: "linear-gradient(135deg, #34c759 0%, #248a3d 100%)",
+    },
+    {
+      key: "messages",
+      label: "訊息",
+      icon: <MessageCircle className="w-6 h-6 text-white" strokeWidth={2} fill="white" />,
+      bg: "linear-gradient(135deg, #5ac8fa 0%, #007aff 100%)",
+    },
+    {
+      key: "browser",
+      label: "瀏覽器",
+      icon: <Compass className="w-6 h-6 text-white" strokeWidth={2} />,
+      bg: "linear-gradient(135deg, #007aff 0%, #0040dd 100%)",
+    },
+  ];
+
   const bgStyle =
     theme === "dark"
       ? "linear-gradient(180deg, #1c1c1e 0%, #000000 100%)"
@@ -77,19 +108,14 @@ export function HomeScreen({ onOpenApp, intelPoints, scamScore }: HomeScreenProp
       className="h-full min-h-0 flex flex-col overflow-hidden relative"
       style={{ background: bgStyle }}
     >
-      {/* 上半部內容區 - flex-1 可滾動 */}
+      {/* 上半部內容區 - 移除雙重時間，直接從玩家資訊卡開始 */}
       <div className="flex-1 min-h-0 flex flex-col overflow-y-auto">
-        {/* iOS 主畫面頂部時間顯示 */}
-        <div className="pt-2 pb-1 text-center shrink-0">
-          <IOSTime />
-        </div>
-
         {/* 玩家資訊小卡片 */}
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4 }}
-          className="mx-4 mb-2 mt-1 shrink-0"
+          className="mx-4 mb-2 mt-3 shrink-0"
         >
           <div
             className="rounded-2xl p-2.5 flex items-center justify-between backdrop-blur-xl"
@@ -174,13 +200,16 @@ export function HomeScreen({ onOpenApp, intelPoints, scamScore }: HomeScreenProp
         </p>
       </div>
 
-      {/* 底部 Dock 欄 - shrink-0 確保永遠完整顯示 */}
+      {/* 底部 Dock 欄 - 與桌面 App 不同（電話/訊息/瀏覽器佔位）
+          底部不貼死螢幕，預留 safe-area-bottom 空間 */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, delay: 0.4 }}
-        className="px-3 pt-2 pb-2 shrink-0"
-        style={{ paddingBottom: "calc(0.5rem + env(safe-area-inset-bottom, 0px))" }}
+        className="px-3 pt-2 shrink-0"
+        style={{
+          paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom, 0px))",
+        }}
       >
         <div
           className="rounded-[28px] p-2.5 flex items-center justify-around backdrop-blur-2xl"
@@ -189,52 +218,26 @@ export function HomeScreen({ onOpenApp, intelPoints, scamScore }: HomeScreenProp
             border: theme === "dark" ? "1px solid rgba(255,255,255,0.1)" : "1px solid rgba(0,0,0,0.06)",
           }}
         >
-          {apps.map((app) => (
+          {dockApps.map((app) => (
             <button
               key={`dock-${app.key}`}
-              onClick={() => onOpenApp(app.key)}
+              onClick={() => {
+                // 佔位 App 提示之後加入功能
+                alert(`${app.label} App 即將推出，敬請期待！`);
+              }}
               className="relative active:scale-90 transition"
               aria-label={app.label}
             >
               <div
-                className="w-[50px] h-[50px] flex items-center justify-center"
+                className="w-[50px] h-[50px] flex items-center justify-center opacity-60"
                 style={{ background: app.bg, borderRadius: "12px" }}
               >
                 {app.icon}
               </div>
-              {app.badge && (
-                <span
-                  className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2"
-                  style={{ borderColor: theme === "dark" ? "rgba(58,58,60,0.6)" : "rgba(255,255,255,0.6)" }}
-                >
-                  {app.badge}
-                </span>
-              )}
             </button>
           ))}
         </div>
       </motion.div>
     </div>
   );
-}
-
-/** iOS 主畫面大時鐘 */
-function IOSTime() {
-  const time = useCurrentTime();
-  const theme = useGameStore((s) => s.theme);
-  return (
-    <div
-      className="text-[13px] font-semibold"
-      style={{ color: theme === "dark" ? "rgba(255,255,255,0.9)" : "rgba(0,0,0,0.9)" }}
-    >
-      {time}
-    </div>
-  );
-}
-
-function useCurrentTime() {
-  const d = new Date();
-  const h = d.getHours().toString().padStart(2, "0");
-  const m = d.getMinutes().toString().padStart(2, "0");
-  return `${h}:${m}`;
 }

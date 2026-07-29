@@ -47,7 +47,7 @@ export function InfoBrokerApp({ onBack }: { onBack: () => void }) {
         </div>
 
         {/* 目標列表 */}
-        <div className="flex-1 overflow-y-auto p-3 space-y-3">
+        <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-3 scroll-safe-bottom">
           <p className="text-white/40 text-xs px-1">可購買的情報（隨機供應）</p>
           {NPCS.map((npc) => {
             const unlocked = unlockedNpcIds.includes(npc.id);

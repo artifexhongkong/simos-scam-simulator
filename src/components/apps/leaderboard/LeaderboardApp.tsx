@@ -128,7 +128,7 @@ export function LeaderboardApp({ onBack }: { onBack: () => void }) {
       </div>
 
       {/* 榜單 */}
-      <div className="flex-1 min-h-0 overflow-y-auto">
+      <div className="flex-1 min-h-0 overflow-y-auto scroll-safe-bottom">
         <div
           className="px-4 py-2 flex items-center justify-between sticky top-0 backdrop-blur-sm z-10 shrink-0"
           style={{ background: "var(--im-header-bg)", borderBottom: `1px solid ${cardBorder}` }}

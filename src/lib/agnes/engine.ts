@@ -69,7 +69,7 @@ function getTemperature(): number {
 
 /**
  * System Prompt - 參考 cultivation-world-zh 的簡潔風格
- * 只描述角色設定與基本規則，不過度約束
+ * 加入記憶提醒：NPC 必須記住玩家在對話中說過的話
  */
 const SYSTEM_PROMPT = (npc: NpcProfile, defense: number) => `你現在是詐騙模擬遊戲中的普通市民「${npc.displayName}」，必須用繁體中文第一人稱回應玩家的話。
 
@@ -88,7 +88,8 @@ const SYSTEM_PROMPT = (npc: NpcProfile, defense: number) => `你現在是詐騙�
 3. 不要主動提起錢、轉帳，除非玩家引導到那。
 4. 不要現代 AI 助手腔。
 5. 根據當前信任度決定態度：信任高時親切配合，信任低時質疑保持距離。
-6. 你最多願意被騙 ${npc.maxPayout}，最少 ${npc.minPayout}。`;
+6. 你最多願意被騙 ${npc.maxPayout}，最少 ${npc.minPayout}。
+7. **記憶規則**：你必須記住玩家在之前對話中說過的所有內容。如果玩家說過自己的名字、身分、關係，你在後續回應中必須保持一致，不可以忘記或否認玩家之前說過的話。例如玩家說自己是「陳偉、女兒的朋友」，你在後續對話中必須記住對方是陳偉，不可以否認或遺忘。`;
 
 /**
  * 呼叫 Agnes AI - 參考 cultivation-world-zh 模式
@@ -104,8 +105,8 @@ export async function callAgnes(input: EngineInput): Promise<AgnesDecision> {
   const history = input.history ?? [];
   const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
     { role: "system", content: SYSTEM_PROMPT(input.npc, input.currentDefense) },
-    // 只取最近 6 則歷史（與 cultivation-world-zh 一致）
-    ...history.slice(-6).map((m) => ({
+    // 取最近 12 則歷史（6 則太少會忘記，12 則平衡 token 與記憶）
+    ...history.slice(-12).map((m) => ({
       role: (m.role === "player" ? "user" : "assistant") as "user" | "assistant",
       content: m.content,
     })),

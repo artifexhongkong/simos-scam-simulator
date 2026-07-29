@@ -41,7 +41,8 @@ const SYSTEM_PROMPT = (npcBackground: string, npcName: string, npcPersonality: s
 3. 不要主動提起錢、轉帳，除非玩家引導到那。
 4. 不要現代 AI 助手腔。
 5. 根據當前信任度決定態度：信任高時親切配合，信任低時質疑保持距離。
-6. 你最多願意被騙 ${maxPayout}，最少 ${minPayout}。`;
+6. 你最多願意被騙 ${maxPayout}，最少 ${minPayout}。
+7. **記憶規則**：你必須記住玩家在之前對話中說過的所有內容。如果玩家說過自己的名字、身分、關係，你在後續回應中必須保持一致，不可以忘記或否認玩家之前說過的話。例如玩家說自己是「陳偉、女兒的朋友」，你在後續對話中必須記住對方是陳偉，不可以否認或遺忘。`;
 
 export async function POST(req: NextRequest) {
   const startTime = Date.now();
@@ -73,10 +74,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 組裝 messages: [system] + [最近6則歷史] + [玩家輸入]
+    // 組裝 messages: [system] + [最近12則歷史] + [玩家輸入]
     const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
       { role: "system", content: SYSTEM_PROMPT(npc.background, npc.displayName, npc.hiddenPersonality, body.currentDefense, npc.maxPayout, npc.minPayout) },
-      ...history.slice(-6).map((m) => ({
+      ...history.slice(-12).map((m) => ({
         role: (m.role === "player" ? "user" : "assistant") as "user" | "assistant",
         content: m.content,
       })),

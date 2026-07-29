@@ -96,7 +96,7 @@ export function TeleChatApp({ onBack }: { onBack: () => void }) {
       </div>
 
       {/* 好友列表 */}
-      <div className="flex-1 min-h-0 overflow-y-auto">
+      <div className="flex-1 min-h-0 overflow-y-auto scroll-safe-bottom">
         {friends.length === 0 ? (
           <EmptyState onAdd={() => setMode("add")} />
         ) : (

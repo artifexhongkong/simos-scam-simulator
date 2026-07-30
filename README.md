@@ -154,7 +154,8 @@ APK 打包透過 GitHub Actions 自動執行：
 
 | 版本 | 主要更新 |
 |------|----------|
-| v1.52 | 套用 LinguaVerse 專案的極簡輸入框做法：MainActivity 不覆寫 WebView、不移除長按、不注入 JS；CSS 只保留 `-webkit-appearance: none` + `::selection` + `font-size: 16px` |
+| v1.53 | **選取手柄黑色背板修復**：styles.xml 的 `windowBackground` 從黑色改為白色，capacitor `backgroundColor` 從 #000000 改為 #ffffff。這是黑色背板的根本原因 |
+| v1.52 | 套用 LinguaVerse 專案的極簡輸入框做法 |
 | v1.51 | 套用 ZAI-Assistant 專案的選取手柄方案 |
 | v1.50 | 移除所有無效的 drawable 覆寫 |
 | v1.49 | 嘗試用 PNG drawable 取代 vector drawable（對 WebView 無效） |

@@ -43,6 +43,9 @@ jobs:
           $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-34" "build-tools;34.0.0" "platform-tools" > /dev/null 2>&1 || true
           echo "SDK setup complete"
 
+      - name: Install Python dependencies (for handle generation)
+        run: pip install Pillow
+
       - name: Install JS dependencies
         run: bun install --frozen-lockfile || bun install
 
@@ -119,50 +122,22 @@ jobs:
                       controller.hide(WindowInsetsCompat.Type.systemBars());
                   }
 
-                  // 延遲禁用 WebView 的長按與文字選取（修正選取手柄顯示問題）
+                  // 延遲禁用 WebView 長按（防止長按彈出系統選單，但不影響輸入框選取手柄）
                   // Capacitor 的 WebView 在 super.onCreate() 後才建立，需 postDelayed
                   new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                      applyWebViewSelectionFix();
-                  }, 500);
-                  // 再次延遲執行（確保頁面載入後也能生效）
-                  new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                      applyWebViewSelectionFix();
-                  }, 2000);
-              }
-
-              /** 全面禁用 WebView 文字選取 */
-              private void applyWebViewSelectionFix() {
-                  // 方法 1：透過 bridge 取得 WebView
-                  if (this.bridge != null && this.bridge.getWebView() != null) {
-                      configureWebView(this.bridge.getWebView());
-                  }
-                  // 方法 2：遞迴遍歷 View 樹找出所有 WebView
-                  View root = getWindow().getDecorView();
-                  disableLongClickRecursive(root);
-              }
-
-              /** 配置 WebView：禁用長按 + 注入 JS 禁用選取 */
-              private void configureWebView(WebView webView) {
-                  // 1. 禁用長按（防止彈出選取手柄）
-                  webView.setOnLongClickListener(new View.OnLongClickListener() {
-                      @Override
-                      public boolean onLongClick(View v) {
-                          return true; // 消費事件
+                      if (this.bridge != null && this.bridge.getWebView() != null) {
+                          WebView webView = this.bridge.getWebView();
+                          webView.setOnLongClickListener(new View.OnLongClickListener() {
+                              @Override
+                              public boolean onLongClick(View v) {
+                                  return true; // 消費長按事件，不彈出系統選單
+                              }
+                          });
                       }
-                  });
-                  webView.setLongClickable(false);
-
-                  // 2. 注入 JS 禁用 contextmenu 與 selectionchange（不覆寫 WebViewClient）
-                  // 用 evaluateJavascript 直接注入，避免破壞 Capacitor 的 WebViewClient
-                  String js = "(function(){" +
-                      "document.addEventListener('contextmenu',function(e){e.preventDefault();return false;},true);" +
-                      "document.addEventListener('selectstart',function(e){" +
-                      "  var t=e.target;" +
-                      "  if(t && (t.tagName==='INPUT'||t.tagName==='TEXTAREA')){return true;}" +
-                      "  e.preventDefault();return false;" +
-                      "},true);" +
-                      "})();";
-                  webView.evaluateJavascript(js, null);
+                      // 遞迴遍歷 View 樹找出所有 WebView
+                      View root = getWindow().getDecorView();
+                      disableLongClickRecursive(root);
+                  }, 500);
               }
 
               /** 遞迴遍歷 View 樹，禁用所有 WebView 的長按 */
@@ -174,7 +149,6 @@ jobs:
                               return true;
                           }
                       });
-                      view.setLongClickable(false);
                   }
                   if (view instanceof android.view.ViewGroup) {
                       android.view.ViewGroup group = (android.view.ViewGroup) view;
@@ -205,31 +179,13 @@ jobs:
             fi
           fi
 
-          # === 自訂文字選取手柄 drawables（備用方案） ===
-          # 主要修正方式是 MainActivity.java 中禁用 WebView 長按
-          # 此 drawable 作為備用：實心水滴形狀，路徑完全在 viewport 內
-          # 尖端朝上（指向文字），無鏤空黑色問題
-          DRAWABLE_DIR=android/app/src/main/res/drawable
-          mkdir -p "$DRAWABLE_DIR"
-
-          # 共用實心水滴形狀（viewport 20x28，路徑全在範圍內）
-          cat > "$DRAWABLE_DIR/text_select_handle.xml" <<'XML'
-          <?xml version="1.0" encoding="utf-8"?>
-          <vector xmlns:android="http://schemas.android.com/apk/res/android"
-              android:width="20dp"
-              android:height="28dp"
-              android:viewportWidth="20"
-              android:viewportHeight="28">
-              <path
-                  android:fillColor="#007AFF"
-                  android:pathData="M10,0 L7,7 C3.5,9.5 1,13.5 1,18 C1,23.5 5,27.5 10,27.5 C15,27.5 19,23.5 19,18 C19,13.5 16.5,9.5 13,7 L10,0 Z" />
-          </vector>
-          XML
-
-          # 三個手柄都用同一個形狀（Android 會自動定位）
-          cp "$DRAWABLE_DIR/text_select_handle.xml" "$DRAWABLE_DIR/text_select_handle_middle.xml"
-          cp "$DRAWABLE_DIR/text_select_handle.xml" "$DRAWABLE_DIR/text_select_handle_left.xml"
-          cp "$DRAWABLE_DIR/text_select_handle.xml" "$DRAWABLE_DIR/text_select_handle_right.xml"
+          # === 自訂文字選取手柄 drawables（PNG，修正系統預設手柄黑色邊框問題） ===
+          # 系統預設的 textSelectHandle 在 WebView 中渲染時會有黑色邊框/陰影
+          # 用 PNG 取代：正確的 alpha 通道，無黑色鏤空問題
+          # 使用 Python + Pillow 生成多密度 PNG（mdpi/hdpi/xhdpi/xxhdpi）
+          RES_DIR=android/app/src/main/res
+          mkdir -p "$RES_DIR"
+          python3 scripts/generate_handles.py "$RES_DIR"
 
           # 加入全螢幕樣式（含自訂 textSelectHandle，覆寫系統預設）
           STYLES=android/app/src/main/res/values/styles.xml

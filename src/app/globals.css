@@ -195,22 +195,10 @@
     user-select: text;
     /* iOS 藍色游標與選取色 */
     caret-color: #007aff;
-    /* 禁用 WebKit 長按選取手柄（Android WebView 鏤空黑色問題的根本修復） */
-    -webkit-touch-callout: none;
-    -webkit-tap-highlight-color: transparent;
   }
   input::selection, textarea::selection {
     background: rgba(0, 122, 255, 0.2);
     color: inherit;
-  }
-  /* 禁用所有非輸入元素的文字選取（防止長按彈出選取手柄） */
-  * {
-    -webkit-touch-callout: none;
-  }
-  /* 確保訊息氣泡、按鈕等不可選取 */
-  p, span, div, h1, h2, h3, h4, h5, h6, li, button, a {
-    -webkit-user-select: none;
-    user-select: none;
   }
   #__next, #root {
     height: 100%;

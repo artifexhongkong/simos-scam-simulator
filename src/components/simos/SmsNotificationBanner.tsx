@@ -10,7 +10,7 @@ import { useGameStore } from "@/lib/game/store";
  * 當有新的未讀短訊時，在畫面最上方顯示一條類似手機短信通知的橫幅。
  * 自動消失，點擊可直接進入簡訊內容頁面。
  */
-export function SmsNotificationBanner({ onOpenMessages }: { onOpenMessages: () => void }) {
+export function SmsNotificationBanner({ onOpenMessages }: { onOpenMessages: (smsId: string) => void }) {
   const smsMessages = useGameStore((s) => s.smsMessages);
   const unreadSmsCount = useGameStore((s) => s.unreadSmsCount);
   const markSmsRead = useGameStore((s) => s.markSmsRead);
@@ -48,9 +48,10 @@ export function SmsNotificationBanner({ onOpenMessages }: { onOpenMessages: () =
   };
 
   const handleTap = () => {
+    if (!currentSms) return;
     markSmsRead(currentSms.id);
     setVisible(false);
-    onOpenMessages();
+    onOpenMessages(currentSms.id);
   };
 
   return (

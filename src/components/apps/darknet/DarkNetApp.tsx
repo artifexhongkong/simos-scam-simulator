@@ -30,6 +30,7 @@ export function DarkNetApp({ onBack }: { onBack: () => void }) {
   const darkCoin = useGameStore((s) => s.darkCoin);
   const riskLevel = useGameStore((s) => s.riskLevel);
   const alias = useGameStore((s) => s.alias);
+  const phoneNumber = useGameStore((s) => s.phoneNumber);
   const buyPhoneNumber = useGameStore((s) => s.buyPhoneNumber);
   const buyPhoneNumberByAd = useGameStore((s) => s.buyPhoneNumberByAd);
 
@@ -122,6 +123,7 @@ export function DarkNetApp({ onBack }: { onBack: () => void }) {
             darkCoin={darkCoin}
             riskLevel={riskLevel}
             alias={alias}
+            phoneNumber={phoneNumber}
             onBuyDrc={handleBuyWithDrc}
             onBuyAd={handleBuyWithAd}
             phonePrice={PHONE_PRICE}
@@ -354,6 +356,7 @@ function PhoneShopPage({
   darkCoin,
   riskLevel,
   alias,
+  phoneNumber,
   onBuyDrc,
   onBuyAd,
   phonePrice,
@@ -361,6 +364,7 @@ function PhoneShopPage({
   darkCoin: number;
   riskLevel: number;
   alias: string;
+  phoneNumber: string;
   onBuyDrc: () => void;
   onBuyAd: () => void;
   phonePrice: number;
@@ -382,7 +386,7 @@ function PhoneShopPage({
           免洗號碼商店
         </h2>
         <p className="text-[11px]" style={{ color: "#8e8e93" }}>
-          購買新電話號碼 + 全新身份
+          購買新電話號碼（代號不變）
         </p>
       </div>
 
@@ -398,6 +402,10 @@ function PhoneShopPage({
           <div className="flex justify-between">
             <span className="text-[12px]" style={{ color: "#8e8e93" }}>代號</span>
             <span className="text-[12px] font-mono" style={{ color: "#fff" }}>{alias}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-[12px]" style={{ color: "#8e8e93" }}>電話號碼</span>
+            <span className="text-[12px] font-mono" style={{ color: "#ff9500" }}>{phoneNumber}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-[12px]" style={{ color: "#8e8e93" }}>風控值</span>
@@ -428,11 +436,11 @@ function PhoneShopPage({
 
         <div className="space-y-1.5 mb-4">
           {[
-            "全新電話號碼",
-            "隨機新代號 + 頭像",
-            "新 TeleChat ID",
+            "全新隨機電話號碼",
+            "代號維持不變",
             "風控值重置為 0",
             "保留所有 DRC、流量、積分",
+            "保留好友與情報",
           ].map((feature) => (
             <div key={feature} className="flex items-center gap-2">
               <Check className="w-3.5 h-3.5 shrink-0" style={{ color: "#34c759" }} />

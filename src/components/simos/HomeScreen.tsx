@@ -25,6 +25,7 @@ export function HomeScreen({ onOpenApp }: { onOpenApp: (app: AppName) => void })
   const conversations = useGameStore((s) => s.conversations);
   const alias = useGameStore((s) => s.alias);
   const playerAvatar = useGameStore((s) => s.playerAvatar);
+  const phoneNumber = useGameStore((s) => s.phoneNumber);
   const theme = useGameStore((s) => s.theme);
   const darkCoin = useGameStore((s) => s.darkCoin);
   const dataTraffic = useGameStore((s) => s.dataTraffic);
@@ -134,6 +135,9 @@ export function HomeScreen({ onOpenApp }: { onOpenApp: (app: AppName) => void })
                   <p style={{ color: textSub, fontSize: "9px" }}>CC園區員工代號</p>
                   <p className="text-xs font-bold leading-tight" style={{ color: textMain }}>
                     {alias}
+                  </p>
+                  <p className="text-[9px] font-mono leading-tight mt-0.5" style={{ color: textSub }}>
+                    📱 {phoneNumber}
                   </p>
                 </div>
               </div>

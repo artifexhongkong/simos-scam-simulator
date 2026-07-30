@@ -19,6 +19,7 @@ export type AppName = "home" | "telechat" | "broker" | "leaderboard" | "settings
 export function SimOS() {
   const [activeApp, setActiveApp] = useState<AppName>("home");
   const [hydrated, setHydrated] = useState(false);
+  const [pendingSmsId, setPendingSmsId] = useState<string | null>(null);
 
   const theme = useGameStore((s) => s.theme);
 
@@ -65,11 +66,11 @@ export function SimOS() {
         {activeApp === "broker" && <InfoBrokerApp onBack={() => setActiveApp("home")} />}
         {activeApp === "leaderboard" && <LeaderboardApp onBack={() => setActiveApp("home")} />}
         {activeApp === "settings" && <SettingsApp onBack={() => setActiveApp("home")} />}
-        {activeApp === "messages" && <MessagesApp onBack={() => setActiveApp("home")} />}
+        {activeApp === "messages" && <MessagesApp onBack={() => setActiveApp("home")} initialSmsId={pendingSmsId} onConsumedSmsId={() => setPendingSmsId(null)} />}
         {activeApp === "darknet" && <DarkNetApp onBack={() => setActiveApp("home")} />}
 
         {/* SMS 通知橫幅（最頂層，類似手機短信通知） */}
-        <SmsNotificationBanner onOpenMessages={() => setActiveApp("messages")} />
+        <SmsNotificationBanner onOpenMessages={(smsId) => { setPendingSmsId(smsId); setActiveApp("messages"); }} />
 
         {/* Debug 浮窗按鈕（懸浮在所有頁面之上） */}
         <DebugFloatingButton />

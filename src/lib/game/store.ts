@@ -55,6 +55,7 @@ export interface GameState {
   playerId: string;
   playerAvatar: string;
   playerTelechatId: string;
+  phoneNumber: string; // 電話號碼（購買新號碼時只換這個，代號不變）
 
   // UI 偏好設定
   theme: "dark" | "light";
@@ -165,6 +166,18 @@ function randomTelechatId(): string {
   return `scammer_${id}`;
 }
 
+function randomPhoneNumber(): string {
+  // 生成隨機電話號碼（格式：+60 1X-XXX XXXX，馬來西亞風格）
+  const prefixes = ["+60 1", "+65 8", "+65 9", "+852 5", "+852 6", "+852 9"];
+  const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
+  let num = "";
+  for (let i = 0; i < 8; i++) {
+    num += Math.floor(Math.random() * 10);
+    if (i === 3) num += " ";
+  }
+  return `${prefix}${num}`;
+}
+
 export const useGameStore = create<GameState>()(
   persist(
     (set, get) => ({
@@ -172,6 +185,7 @@ export const useGameStore = create<GameState>()(
       playerId: genId(),
       playerAvatar: randomEmoji(),
       playerTelechatId: randomTelechatId(),
+      phoneNumber: randomPhoneNumber(),
       theme: "light",
       showTimestamps: true,
       uiStyle: "ios",
@@ -576,7 +590,7 @@ export const useGameStore = create<GameState>()(
         }),
 
       // === 購買新電話號碼（黑網服務）===
-      // 花費 350 DRC，重置風控值為 0，獲得新身份（新代號 + 頭像 + TeleChat ID）
+      // 花費 350 DRC，只換電話號碼，代號不變
       buyPhoneNumber: () => {
         const s = get();
         const PHONE_PRICE = 350;
@@ -584,16 +598,14 @@ export const useGameStore = create<GameState>()(
           return { ok: false, error: `DRC 不足，需要 ${PHONE_PRICE} DRC` };
         }
 
-        const newAlias = randomAlias();
-        const newAvatar = randomEmoji();
-        const newTelechatId = randomTelechatId();
+        const newPhone = randomPhoneNumber();
 
         // 發送「黑網服務確認」簡訊
         const confirmSms: SmsMessage = {
           id: genId(),
           sender: "黑網服務",
           subject: "【黑網】新號碼已啟用",
-          body: `您的新號碼已啟用。代號：${newAlias}。風控記錄已清除。請謹慎使用，避免再次被標記。`,
+          body: `您的新號碼已啟用：${newPhone}。風控記錄已清除。代號維持不變。請謹慎使用，避免再次被標記。`,
           ts: Date.now(),
           read: false,
           type: "system",
@@ -603,29 +615,24 @@ export const useGameStore = create<GameState>()(
         set({
           darkCoin: s.darkCoin - PHONE_PRICE,
           riskLevel: 0,
-          alias: newAlias,
-          playerAvatar: newAvatar,
-          playerTelechatId: newTelechatId,
-          playerId: genId(),
+          phoneNumber: newPhone,
           smsMessages: [confirmSms, ...s.smsMessages].slice(0, 50),
           unreadSmsCount: s.unreadSmsCount + 1,
         });
 
-        return { ok: true, newAlias };
+        return { ok: true, newAlias: s.alias };
       },
 
-      // 看廣告免費購買新號碼（不扣 DRC）
+      // 看廣告免費購買新號碼（不扣 DRC，只換電話號碼）
       buyPhoneNumberByAd: () => {
         const s = get();
-        const newAlias = randomAlias();
-        const newAvatar = randomEmoji();
-        const newTelechatId = randomTelechatId();
+        const newPhone = randomPhoneNumber();
 
         const confirmSms: SmsMessage = {
           id: genId(),
           sender: "黑網服務",
           subject: "【黑網】新號碼已啟用（廣告兌換）",
-          body: `廣告兌換成功！您的新號碼已啟用。代號：${newAlias}。風控記錄已清除。`,
+          body: `廣告兌換成功！您的新號碼已啟用：${newPhone}。風控記錄已清除。代號維持不變。`,
           ts: Date.now(),
           read: false,
           type: "system",
@@ -634,15 +641,12 @@ export const useGameStore = create<GameState>()(
 
         set({
           riskLevel: 0,
-          alias: newAlias,
-          playerAvatar: newAvatar,
-          playerTelechatId: newTelechatId,
-          playerId: genId(),
+          phoneNumber: newPhone,
           smsMessages: [confirmSms, ...s.smsMessages].slice(0, 50),
           unreadSmsCount: s.unreadSmsCount + 1,
         });
 
-        return { ok: true, newAlias };
+        return { ok: true, newAlias: s.alias };
       },
 
       resetGame: () => {
@@ -660,6 +664,7 @@ export const useGameStore = create<GameState>()(
           playerId: genId(),
           playerAvatar: randomEmoji(),
           playerTelechatId: randomTelechatId(),
+          phoneNumber: randomPhoneNumber(),
           theme: "light",
           showTimestamps: true,
           uiStyle: "ios",

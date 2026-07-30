@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ChevronUp, Trash2, CheckCheck, Mail, AlertTriangle, Wifi, Gift, Smartphone, Send, ArrowLeft } from "lucide-react";
 import { useGameStore, type SmsMessage } from "@/lib/game/store";
 
-export function MessagesApp({ onBack }: { onBack: () => void }) {
+export function MessagesApp({ onBack, initialSmsId, onConsumedSmsId }: { onBack: () => void; initialSmsId?: string | null; onConsumedSmsId?: () => void }) {
   const smsMessages = useGameStore((s) => s.smsMessages);
   const unreadSmsCount = useGameStore((s) => s.unreadSmsCount);
   const markSmsRead = useGameStore((s) => s.markSmsRead);
@@ -13,7 +13,16 @@ export function MessagesApp({ onBack }: { onBack: () => void }) {
   const deleteSms = useGameStore((s) => s.deleteSms);
   const replySms = useGameStore((s) => s.replySms);
 
-  const [activeSmsId, setActiveSmsId] = useState<string | null>(null);
+  const [activeSmsId, setActiveSmsId] = useState<string | null>(initialSmsId ?? null);
+
+  // 當 initialSmsId 變化時，更新 activeSmsId 並標記已讀
+  useEffect(() => {
+    if (initialSmsId) {
+      setActiveSmsId(initialSmsId);
+      markSmsRead(initialSmsId);
+      onConsumedSmsId?.();
+    }
+  }, [initialSmsId, markSmsRead, onConsumedSmsId]);
 
   const activeSms = smsMessages.find((m) => m.id === activeSmsId) || null;
 

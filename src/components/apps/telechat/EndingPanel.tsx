@@ -188,20 +188,23 @@ export function EndingPanel({ npc, conv, onClose, onReset, resetCount = 0 }: End
           >
             關閉
           </button>
-          <button
-            onClick={onReset}
-            className="flex-1 py-2.5 rounded-xl bg-blue-500 text-white text-sm font-semibold hover:bg-blue-600 active:scale-95 transition flex items-center justify-center gap-1.5"
-          >
-            {resetCount === 0 ? (
-              <>
-                <RotateCcw className="w-3.5 h-3.5" /> 再騙一次
-              </>
-            ) : (
-              <>
-                <PlayCircle className="w-3.5 h-3.5" /> 看廣告再騙
-              </>
-            )}
-          </button>
+          {/* 成功詐騙後不顯示「再騙一次」按鈕（不能二次詐騙同一人） */}
+          {!isSuccess && (
+            <button
+              onClick={onReset}
+              className="flex-1 py-2.5 rounded-xl bg-blue-500 text-white text-sm font-semibold hover:bg-blue-600 active:scale-95 transition flex items-center justify-center gap-1.5"
+            >
+              {resetCount === 0 ? (
+                <>
+                  <RotateCcw className="w-3.5 h-3.5" /> 再騙一次
+                </>
+              ) : (
+                <>
+                  <PlayCircle className="w-3.5 h-3.5" /> 看廣告再騙
+                </>
+              )}
+            </button>
+          )}
         </div>
       </motion.div>
     </motion.div>

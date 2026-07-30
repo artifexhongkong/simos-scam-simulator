@@ -456,20 +456,23 @@ export function ChatWindow({ npc, onBack }: { npc: NpcProfile; onBack: () => voi
           >
             <Download className="w-5 h-5" />
           </button>
-          <button
-            onClick={handleResetClick}
-            className="p-1.5 rounded-full active:opacity-50 transition relative"
-            style={{ color: "var(--im-link-text)" }}
-            aria-label="重新開始"
-            title={resetCount === 0 ? "重新開始對話（首次免費）" : "重新開始對話（需觀看廣告）"}
-          >
-            <RotateCcw className="w-5 h-5" />
-            {resetCount > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-amber-500 flex items-center justify-center" style={{ fontSize: 7 }}>
-                <span className="text-white font-bold leading-none">AD</span>
-              </span>
-            )}
-          </button>
+          {/* 成功詐騙後不顯示重新開始按鈕（不能二次詐騙） */}
+          {conv.status !== "succeeded" && (
+            <button
+              onClick={handleResetClick}
+              className="p-1.5 rounded-full active:opacity-50 transition relative"
+              style={{ color: "var(--im-link-text)" }}
+              aria-label="重新開始"
+              title={resetCount === 0 ? "重新開始對話（首次免費）" : "重新開始對話（需觀看廣告）"}
+            >
+              <RotateCcw className="w-5 h-5" />
+              {resetCount > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-amber-500 flex items-center justify-center" style={{ fontSize: 7 }}>
+                  <span className="text-white font-bold leading-none">AD</span>
+                </span>
+              )}
+            </button>
+          )}
         </div>
       </div>
 

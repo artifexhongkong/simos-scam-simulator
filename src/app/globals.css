@@ -243,8 +243,10 @@
 }
 
 /* Debug 模式：全域文字選取（由 Debug 浮窗按鈕切換） */
+body.debug-select-all,
 body.debug-select-all * {
   -webkit-user-select: text !important;
   user-select: text !important;
   -webkit-touch-callout: default !important;
+  touch-action: auto !important;
 }

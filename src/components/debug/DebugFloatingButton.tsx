@@ -275,6 +275,7 @@ export function DebugFloatingButton() {
               left: Math.min(position.x - 160, (typeof window !== "undefined" ? window.innerWidth : 360) - 320),
               top: Math.max(20, position.y - 480),
               zIndex: 9998,
+              touchAction: "auto",
             }}
             className="w-[300px] rounded-2xl overflow-hidden"
           >

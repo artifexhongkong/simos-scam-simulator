@@ -428,6 +428,9 @@ export const useGameStore = create<GameState>()(
         set((s) => {
           const npc = getNpcById(npcId, s.generatedNpcs);
           if (!npc) return {};
+          // 已成功詐騙的 NPC 不能再重置（不能二次詐騙同一人）
+          const existingConv = s.conversations[npcId];
+          if (existingConv?.status === "succeeded") return {};
           const newConv: ConversationState = {
             npcId,
             messages: [
@@ -605,7 +608,7 @@ export const useGameStore = create<GameState>()(
           id: genId(),
           sender: "黑網服務",
           subject: "【黑網】新號碼已啟用",
-          body: `您的新號碼已啟用：${newPhone}。風控記錄已清除。代號維持不變。請謹慎使用，避免再次被標記。`,
+          body: `您的新號碼已啟用：${newPhone}。風控記錄已清除。請謹慎使用，避免再次被標記。`,
           ts: Date.now(),
           read: false,
           type: "system",
@@ -632,7 +635,7 @@ export const useGameStore = create<GameState>()(
           id: genId(),
           sender: "黑網服務",
           subject: "【黑網】新號碼已啟用（廣告兌換）",
-          body: `廣告兌換成功！您的新號碼已啟用：${newPhone}。風控記錄已清除。代號維持不變。`,
+          body: `廣告兌換成功！您的新號碼已啟用：${newPhone}。風控記錄已清除。`,
           ts: Date.now(),
           read: false,
           type: "system",

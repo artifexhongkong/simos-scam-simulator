@@ -437,7 +437,6 @@ function PhoneShopPage({
         <div className="space-y-1.5 mb-4">
           {[
             "全新隨機電話號碼",
-            "代號維持不變",
             "風控值重置為 0",
             "保留所有 DRC、流量、積分",
             "保留好友與情報",

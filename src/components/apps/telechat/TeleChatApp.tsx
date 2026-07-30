@@ -240,6 +240,24 @@ export function TeleChatApp({ onBack }: { onBack: () => void }) {
         )}
       </div>
 
+      {/* 點擊空白處取消刪除模式 */}
+      <AnimatePresence>
+        {longPressActive && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setLongPressActive(null)}
+            onTouchStart={(e) => {
+              e.preventDefault();
+              setLongPressActive(null);
+            }}
+            className="absolute inset-0 z-30"
+            style={{ background: "transparent" }}
+          />
+        )}
+      </AnimatePresence>
+
       {/* 刪除好友確認彈窗 */}
       <AnimatePresence>
         {deleteTarget && (

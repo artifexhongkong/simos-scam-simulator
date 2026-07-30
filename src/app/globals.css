@@ -250,3 +250,12 @@ body.debug-select-all * {
   -webkit-touch-callout: default !important;
   touch-action: auto !important;
 }
+
+/* Debug 浮窗按鈕及面板永遠不可選取（即使開啟全域選取） */
+body.debug-select-all .debug-floating-button,
+body.debug-floating-button,
+.debug-floating-button * {
+  -webkit-user-select: none !important;
+  user-select: none !important;
+  -webkit-touch-callout: none !important;
+}

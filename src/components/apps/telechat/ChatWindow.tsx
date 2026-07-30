@@ -249,15 +249,40 @@ export function ChatWindow({ npc, onBack }: { npc: NpcProfile; onBack: () => voi
 
       // 處理多結局
       if (data.decision === "agree" && data.payoutAmount) {
+        const payoutAmount = data.payoutAmount;
         const sysMsg: ChatMessage = {
           id: genId(),
           role: "system",
-          content: `✓ ${npc.displayName} 已同意轉帳 $${data.payoutAmount.toLocaleString()}。款項已到帳。`,
+          content: `✓ ${npc.displayName} 已同意轉帳 $${payoutAmount.toLocaleString()}。款項已到帳。你可以繼續與對方對話。`,
           ts: Date.now(),
-          meta: { decision: "agree", amount: data.payoutAmount },
+          meta: { decision: "agree", amount: payoutAmount },
         };
         appendMessage(npc.id, sysMsg);
-        setConversationStatus(npc.id, "succeeded", data.payoutAmount, data.endingReason);
+        // 記錄詐騙成功（加積分 + DRC），但保持對話為 active（可繼續詐騙）
+        // 防備值提升（後續詐騙更難）
+        const updatedConv2 = useGameStore.getState().conversations[npc.id];
+        if (updatedConv2) {
+          const scamCount = updatedConv2.scamCount ?? 0;
+          // 每次成功詐騙後防備值 +20（越來越難）
+          const defenseIncrease = 20 + scamCount * 10;
+          updateDefense(npc.id, defenseIncrease);
+          // 記錄詐騙次數
+          useGameStore.setState((s) => ({
+            conversations: {
+              ...s.conversations,
+              [npc.id]: {
+                ...s.conversations[npc.id],
+                scamCount: scamCount + 1,
+                totalPayout: (s.conversations[npc.id]?.totalPayout ?? 0) + payoutAmount,
+              },
+            },
+          }));
+        }
+        // 加積分 + DRC（但狀態保持 active）
+        useGameStore.setState((s) => ({
+          scamScore: s.scamScore + payoutAmount,
+          darkCoin: s.darkCoin + Math.floor(payoutAmount / 100),
+        }));
         setSuccessAnim(true);
         setTimeout(() => setSuccessAnim(false), 2500);
       } else if (data.decision === "block") {
@@ -456,23 +481,20 @@ export function ChatWindow({ npc, onBack }: { npc: NpcProfile; onBack: () => voi
           >
             <Download className="w-5 h-5" />
           </button>
-          {/* 成功詐騙後不顯示重新開始按鈕（不能二次詐騙） */}
-          {conv.status !== "succeeded" && (
-            <button
-              onClick={handleResetClick}
-              className="p-1.5 rounded-full active:opacity-50 transition relative"
-              style={{ color: "var(--im-link-text)" }}
-              aria-label="重新開始"
-              title={resetCount === 0 ? "重新開始對話（首次免費）" : "重新開始對話（需觀看廣告）"}
-            >
-              <RotateCcw className="w-5 h-5" />
-              {resetCount > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-amber-500 flex items-center justify-center" style={{ fontSize: 7 }}>
-                  <span className="text-white font-bold leading-none">AD</span>
-                </span>
-              )}
-            </button>
-          )}
+          <button
+            onClick={handleResetClick}
+            className="p-1.5 rounded-full active:opacity-50 transition relative"
+            style={{ color: "var(--im-link-text)" }}
+            aria-label="重新開始"
+            title={resetCount === 0 ? "重新開始對話（首次免費）" : "重新開始對話（需觀看廣告）"}
+          >
+            <RotateCcw className="w-5 h-5" />
+            {resetCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-amber-500 flex items-center justify-center" style={{ fontSize: 7 }}>
+                <span className="text-white font-bold leading-none">AD</span>
+              </span>
+            )}
+          </button>
         </div>
       </div>
 

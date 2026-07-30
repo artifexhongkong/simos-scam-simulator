@@ -266,14 +266,51 @@ export function judgeDecision(
   if (consecutiveMoney >= 3 && trust < 50) {
     return { decision: "block", defenseDelta: 25, payoutAmount: 0, endingReason: "你頻繁要求轉帳但市民對你信任不足，識破後拉黑。" };
   }
+
+  // 偵測玩家在訊息中開出的具體金額（如「轉 5000 給我」「匯 10000」）
+  const playerAmountMatch = msg.match(/(?:轉|匯|付|繳|存|打)[\s]*\$?(\d[\d,]*)/);
+  let playerRequestedAmount: number | null = null;
+  if (playerAmountMatch) {
+    const parsed = parseInt(playerAmountMatch[1].replace(/,/g, ""), 10);
+    if (!isNaN(parsed) && parsed > 0) {
+      playerRequestedAmount = parsed;
+    }
+  }
+  // 也偵測「給我 XXX 元」「XXX 塊」等
+  if (playerRequestedAmount === null) {
+    const altMatch = msg.match(/(\d[\d,]*)\s*(?:元|塊|蚊|ringgit|dollars?)/i);
+    if (altMatch) {
+      const parsed = parseInt(altMatch[1].replace(/,/g, ""), 10);
+      if (!isNaN(parsed) && parsed > 0) {
+        playerRequestedAmount = parsed;
+      }
+    }
+  }
+
   if (wantsMoney && trust >= 70 && aiWantsAgree) {
-    const ratio = trust / 100;
-    const amount = Math.floor(npc.minPayout + ratio * (npc.maxPayout - npc.minPayout));
+    // 如果玩家開了具體金額，使用玩家開的金額（限制在 NPC 範圍內）
+    let amount: number;
+    if (playerRequestedAmount !== null) {
+      // 玩家開的金額，限制在 minPayout ~ maxPayout * 1.5 範圍（允許超出一些）
+      const maxAllowed = Math.floor(npc.maxPayout * 1.5);
+      amount = Math.min(playerRequestedAmount, maxAllowed);
+      amount = Math.max(amount, npc.minPayout);
+    } else {
+      const ratio = trust / 100;
+      amount = Math.floor(npc.minPayout + ratio * (npc.maxPayout - npc.minPayout));
+    }
     return { decision: "agree", defenseDelta, payoutAmount: amount, endingReason: `成功騙取市民信任，對方願意轉帳 $${amount.toLocaleString()}。` };
   }
   if (wantsMoney && trust >= 60 && aiWantsAgree) {
-    const ratio = trust / 100;
-    const amount = Math.floor(npc.minPayout + ratio * (npc.maxPayout - npc.minPayout));
+    let amount: number;
+    if (playerRequestedAmount !== null) {
+      const maxAllowed = Math.floor(npc.maxPayout * 1.2);
+      amount = Math.min(playerRequestedAmount, maxAllowed);
+      amount = Math.max(amount, npc.minPayout);
+    } else {
+      const ratio = trust / 100;
+      amount = Math.floor(npc.minPayout + ratio * (npc.maxPayout - npc.minPayout));
+    }
     return { decision: "agree", defenseDelta, payoutAmount: amount, endingReason: `市民對你信任有加，願意配合轉帳 $${amount.toLocaleString()}。` };
   }
   if (wantsMoney && trust < 50 && aiWantsDecline && turns >= 3) {

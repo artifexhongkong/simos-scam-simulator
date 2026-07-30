@@ -47,6 +47,8 @@ export interface ConversationState {
   consecutiveMoney: number; // 連續要錢計數
   turns: number; // 對話輪數
   endingReason?: string; // 結局原因（給結果面板顯示）
+  scamCount?: number; // 已成功詐騙次數（同一 NPC 可多次詐騙）
+  totalPayout?: number; // 累計詐騙金額（同一 NPC）
 }
 
 export interface GameState {
@@ -428,9 +430,6 @@ export const useGameStore = create<GameState>()(
         set((s) => {
           const npc = getNpcById(npcId, s.generatedNpcs);
           if (!npc) return {};
-          // 已成功詐騙的 NPC 不能再重置（不能二次詐騙同一人）
-          const existingConv = s.conversations[npcId];
-          if (existingConv?.status === "succeeded") return {};
           const newConv: ConversationState = {
             npcId,
             messages: [

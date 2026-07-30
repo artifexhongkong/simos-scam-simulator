@@ -241,7 +241,7 @@ export function DebugFloatingButton() {
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
         onClick={handleClick}
-        className="w-12 h-12 rounded-full flex items-center justify-center cursor-pointer"
+        className="debug-floating-button w-12 h-12 rounded-full flex items-center justify-center cursor-pointer"
         whileTap={{ scale: 0.9 }}
       >
         <div
@@ -277,7 +277,7 @@ export function DebugFloatingButton() {
               zIndex: 9998,
               touchAction: "auto",
             }}
-            className="w-[300px] rounded-2xl overflow-hidden"
+            className="debug-floating-button w-[300px] rounded-2xl overflow-hidden"
           >
             <div
               className="backdrop-blur-2xl"

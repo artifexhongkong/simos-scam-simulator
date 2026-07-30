@@ -193,6 +193,12 @@
   input, textarea {
     -webkit-user-select: text;
     user-select: text;
+    /* iOS 藍色游標與選取色（與 Android 自訂 textSelectHandle drawable 配合） */
+    caret-color: #007aff;
+  }
+  input::selection, textarea::selection {
+    background: rgba(0, 122, 255, 0.2);
+    color: inherit;
   }
   #__next, #root {
     height: 100%;

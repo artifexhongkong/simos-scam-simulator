@@ -70,23 +70,24 @@ export function HomeScreen({ onOpenApp }: { onOpenApp: (app: AppName) => void })
   ];
 
   // Dock 欄 App（跨分頁常用，佔位，之後加功能）
+  // 還原之前的透明度：Dock 圖示只保留 outline（不填色），讓底色漸層透過圖示內部顯示
   const dockApps: DockTile[] = [
     {
       key: "phone",
       label: "電話",
-      icon: <Phone className="w-6 h-6 text-white" strokeWidth={2} fill="white" />,
+      icon: <Phone className="w-6 h-6 text-white" strokeWidth={2} />,
       bg: "linear-gradient(135deg, #34c759 0%, #248a3d 100%)",
     },
     {
       key: "messages",
       label: "訊息",
-      icon: <Mail className="w-6 h-6 text-white" strokeWidth={2} fill="white" />,
+      icon: <Mail className="w-6 h-6 text-white" strokeWidth={2} />,
       bg: "linear-gradient(135deg, #5ac8fa 0%, #007aff 100%)",
     },
     {
       key: "browser",
       label: "瀏覽器",
-      icon: <Compass className="w-6 h-6 text-white" strokeWidth={2} fill="white" />,
+      icon: <Compass className="w-6 h-6 text-white" strokeWidth={2} />,
       bg: "linear-gradient(135deg, #007aff 0%, #0040dd 100%)",
     },
   ];

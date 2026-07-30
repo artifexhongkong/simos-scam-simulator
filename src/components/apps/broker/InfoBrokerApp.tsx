@@ -24,6 +24,10 @@ export function InfoBrokerApp({ onBack }: { onBack: () => void }) {
   const [showShop, setShowShop] = useState(false);
   const [shuffleKey, setShuffleKey] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
+  // 未知目標的「批次」索引：下拉刷新會輪換顯示不同的未知目標子集
+  // 每批顯示 3 個未知 NPC，下拉刷新後換下一批（循環）
+  const [unknownBatchIdx, setUnknownBatchIdx] = useState(0);
+  const UNKNOWN_BATCH_SIZE = 3;
 
   // 每 15 秒隨機更換未知目標的 emoji
   useEffect(() => {
@@ -53,6 +57,8 @@ export function InfoBrokerApp({ onBack }: { onBack: () => void }) {
   const handleTouchEnd = useCallback(() => {
     if (pullDistance > 60) {
       setRefreshing(true);
+      // 實際刷新：輪換未知目標批次 + 重設 emoji shuffleKey
+      setUnknownBatchIdx(idx => idx + 1);
       setShuffleKey(k => k + 1);
       setTimeout(() => setRefreshing(false), 800);
     }
@@ -176,7 +182,9 @@ export function InfoBrokerApp({ onBack }: { onBack: () => void }) {
           </div>
         )}
 
-        <p className="text-xs px-1" style={{ color: textSub }}>可購買的情報（風控值影響價格·下拉刷新）</p>
+        <p className="text-xs px-1" style={{ color: textSub }}>可購買的情報（風控值影響價格·下拉刷新輪換未知目標）</p>
+
+        {/* 已解鎖的 NPC（已購買情報）：固定顯示在上方 */}
         {NPCS
           .filter((npc) => {
             // 移除已成功詐騙、被封鎖、警覺終止的 NPC
@@ -184,15 +192,7 @@ export function InfoBrokerApp({ onBack }: { onBack: () => void }) {
             if (conv?.status === "succeeded") return false;
             if (conv?.status === "blocked") return false;
             if (conv?.status === "cautious") return false;
-            return true;
-          })
-          .sort((a, b) => {
-            // 已購買普通料子的往上移
-            const aUnlocked = unlockedNpcIds.includes(a.id);
-            const bUnlocked = unlockedNpcIds.includes(b.id);
-            if (aUnlocked && !bUnlocked) return -1;
-            if (!aUnlocked && bUnlocked) return 1;
-            return 0;
+            return unlockedNpcIds.includes(npc.id); // 只顯示已解鎖的
           })
           .map((npc) => {
           const unlocked = unlockedNpcIds.includes(npc.id);
@@ -260,6 +260,96 @@ export function InfoBrokerApp({ onBack }: { onBack: () => void }) {
             </div>
           );
         })}
+
+        {/* 未知目標分隔提示（下拉刷新會輪換此區塊的未知 NPC） */}
+        {(() => {
+          const unknownCount = NPCS.filter((npc) => {
+            const conv = conversations[npc.id];
+            if (conv?.status === "succeeded") return false;
+            if (conv?.status === "blocked") return false;
+            if (conv?.status === "cautious") return false;
+            return !unlockedNpcIds.includes(npc.id);
+          }).length;
+          const totalBatches = Math.max(1, Math.ceil(unknownCount / UNKNOWN_BATCH_SIZE));
+          const currentBatch = (unknownBatchIdx % totalBatches) + 1;
+          return (
+            <div className="flex items-center gap-2 px-1 pt-2" style={{ color: textSub }}>
+              <div className="flex-1 h-px" style={{ background: "var(--im-header-border)" }} />
+              <span className="text-[10px]">未知目標 · 第 {currentBatch}/{totalBatches} 批 · 下拉刷新輪換</span>
+              <div className="flex-1 h-px" style={{ background: "var(--im-header-border)" }} />
+            </div>
+          );
+        })()}
+
+        {/* 未知目標（尚未購買情報）：每批顯示 3 個，下拉刷新輪換 */}
+        {(() => {
+          const unknownNpcs = NPCS.filter((npc) => {
+            const conv = conversations[npc.id];
+            if (conv?.status === "succeeded") return false;
+            if (conv?.status === "blocked") return false;
+            if (conv?.status === "cautious") return false;
+            return !unlockedNpcIds.includes(npc.id);
+          });
+
+          if (unknownNpcs.length === 0) {
+            return (
+              <div className="text-center py-6 text-xs" style={{ color: textSub }}>
+                已掌握所有目標的情報
+              </div>
+            );
+          }
+
+          // 用 unknownBatchIdx 作為種子做偽隨機排序
+          // 只在用戶下拉刷新時變化（每 15 秒的自動 emoji 刷新不影響 NPC 順序，避免畫面跳動）
+          const seed = unknownBatchIdx * 31;
+          const shuffled = [...unknownNpcs].sort((a, b) => {
+            const ha = (a.id.charCodeAt(0) * 17 + a.id.charCodeAt(a.id.length - 1) * 13 + seed) % 97;
+            const hb = (b.id.charCodeAt(0) * 17 + b.id.charCodeAt(b.id.length - 1) * 13 + seed) % 97;
+            return ha - hb;
+          });
+
+          // 計算當前批次的起始位置（循環輪換）
+          const totalBatches = Math.max(1, Math.ceil(shuffled.length / UNKNOWN_BATCH_SIZE));
+          const currentBatch = unknownBatchIdx % totalBatches;
+          const startIdx = currentBatch * UNKNOWN_BATCH_SIZE;
+          const visibleNpcs = shuffled.slice(startIdx, startIdx + UNKNOWN_BATCH_SIZE);
+
+          return visibleNpcs.map((npc) => {
+            const basePrice = npc.price;
+            const actualBase = Math.ceil(basePrice * priceMultiplier);
+            const canAffordBase = darkCoin >= actualBase;
+
+            return (
+              <div key={`${npc.id}-${unknownBatchIdx}`} className="rounded-2xl overflow-hidden" style={{ background: cardBg, border: `1px solid ${cardBorder}` }}>
+                <div className="p-3 flex items-center gap-3">
+                  <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-3xl shrink-0 relative" style={{ background: "var(--im-input-bg)" }}>
+                    <span className="opacity-40">{getUnknownEmoji(npc.id)}</span>
+                    <div className="absolute inset-0 rounded-2xl bg-black/50 backdrop-blur-[2px] flex items-center justify-center">
+                      <Lock className="w-5 h-5" style={{ color: textSub }} />
+                    </div>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-sm font-semibold" style={{ color: textMain }}>未知目標</h4>
+                    </div>
+                    <p className="text-xs mt-0.5" style={{ color: textSub }}>特質：{npc.hookTags.slice(0, 2).join("・")}</p>
+                  </div>
+                </div>
+
+                <div className="px-3 pb-3 flex gap-2">
+                  <button
+                    onClick={() => handleBuy(npc, false)}
+                    disabled={!canAffordBase || purchasing}
+                    className="flex-1 py-2 rounded-lg text-xs font-medium active:scale-95 transition flex items-center justify-center gap-1.5 disabled:opacity-40"
+                    style={{ background: canAffordBase ? "#bf5af2" : "var(--im-input-bg)", color: canAffordBase ? "#fff" : textSub }}
+                  >
+                    <Coins className="w-3.5 h-3.5" /> 普通料子 ({actualBase} DRC)
+                  </button>
+                </div>
+              </div>
+            );
+          });
+        })()}
       </div>
 
       <AnimatePresence>

@@ -50,7 +50,10 @@ export function ChatWindow({ npc, onBack }: { npc: NpcProfile; onBack: () => voi
   const [showQuickPhrases, setShowQuickPhrases] = useState(false);
   const [showImageMaterials, setShowImageMaterials] = useState(false);
   const [showNpcInfo, setShowNpcInfo] = useState(false);
-  const [hasReset, setHasReset] = useState(false);
+  const [resetCount, setResetCount] = useState(0); // 重置次數：0=未用過免費額，>=1=已用過免費額，後續需看廣告
+  const [showAdModal, setShowAdModal] = useState(false); // 廣告彈窗
+  const [adCountdown, setAdCountdown] = useState(0); // 廣告倒數計時
+  const [adCompleted, setAdCompleted] = useState(false); // 廣告是否看完
   const [failedMessages, setFailedMessages] = useState<Set<string>>(new Set());
   const [aiVerified, setAiVerified] = useState(false); // 第一次成功後設為 true，之後不再驗證
   const [keyboardHeight, setKeyboardHeight] = useState(0);
@@ -295,17 +298,56 @@ export function ChatWindow({ npc, onBack }: { npc: NpcProfile; onBack: () => voi
   };
 
   const handleReset = () => {
-    if (hasReset) return;
     resetConversation(npc.id);
-    setHasReset(true);
+    setResetCount(c => c + 1);
     setAiVerified(false); // 重置後重新需要驗證
     setFailedMessages(new Set()); // 清除失敗標記
     setShowResetConfirm(false);
     setShowEnding(false);
     setThinking(false);
     setSuccessAnim(false);
+    setShowAdModal(false);
+    setAdCompleted(false);
     setTimeout(() => inputRef.current?.focus(), 100);
   };
+
+  // 點擊「重新開始」按鈕：第一次免費，之後需看廣告
+  const handleResetClick = () => {
+    if (resetCount === 0) {
+      // 第一次：免費，直接顯示確認彈窗
+      setShowResetConfirm(true);
+    } else {
+      // 之後：需先看廣告
+      setShowAdModal(true);
+      setAdCompleted(false);
+      setAdCountdown(5); // 5 秒廣告
+    }
+  };
+
+  // 廣告倒數計時
+  useEffect(() => {
+    if (!showAdModal || adCountdown <= 0) return;
+    const timer = setTimeout(() => {
+      setAdCountdown(c => {
+        if (c <= 1) {
+          setAdCompleted(true);
+          return 0;
+        }
+        return c - 1;
+      });
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [showAdModal, adCountdown]);
+
+  // 廣告看完後自動顯示重置確認彈窗
+  useEffect(() => {
+    if (adCompleted) {
+      setTimeout(() => {
+        setShowAdModal(false);
+        setShowResetConfirm(true);
+      }, 500);
+    }
+  }, [adCompleted]);
 
   const handleExport = () => {
     const lines: string[] = [];
@@ -408,17 +450,20 @@ export function ChatWindow({ npc, onBack }: { npc: NpcProfile; onBack: () => voi
           >
             <Download className="w-5 h-5" />
           </button>
-          {!hasReset && (
-            <button
-              onClick={() => setShowResetConfirm(true)}
-              className="p-1.5 rounded-full active:opacity-50 transition"
-              style={{ color: "var(--im-link-text)" }}
-              aria-label="重新開始"
-              title="重新開始對話（僅限一次）"
-            >
-              <RotateCcw className="w-5 h-5" />
-            </button>
-          )}
+          <button
+            onClick={handleResetClick}
+            className="p-1.5 rounded-full active:opacity-50 transition relative"
+            style={{ color: "var(--im-link-text)" }}
+            aria-label="重新開始"
+            title={resetCount === 0 ? "重新開始對話（首次免費）" : "重新開始對話（需觀看廣告）"}
+          >
+            <RotateCcw className="w-5 h-5" />
+            {resetCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-amber-500 flex items-center justify-center" style={{ fontSize: 7 }}>
+                <span className="text-white font-bold leading-none">AD</span>
+              </span>
+            )}
+          </button>
         </div>
       </div>
 
@@ -669,8 +714,8 @@ export function ChatWindow({ npc, onBack }: { npc: NpcProfile; onBack: () => voi
             npc={npc}
             conv={conv}
             onClose={() => setShowEnding(false)}
-            onReset={handleReset}
-            hasReset={hasReset}
+            onReset={handleResetClick}
+            resetCount={resetCount}
           />
         )}
       </AnimatePresence>
@@ -679,6 +724,51 @@ export function ChatWindow({ npc, onBack }: { npc: NpcProfile; onBack: () => voi
       <AnimatePresence>
         {showNpcInfo && (
           <NpcInfoModal npc={npc} onClose={() => setShowNpcInfo(false)} />
+        )}
+      </AnimatePresence>
+
+      {/* 廣告彈窗（重新開始對話需觀看廣告） */}
+      <AnimatePresence>
+        {showAdModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 z-[60] bg-black flex flex-col items-center justify-center"
+          >
+            {/* 廣告內容（模擬） */}
+            <div className="flex-1 flex flex-col items-center justify-center p-6">
+              <div
+                className="w-full max-w-xs aspect-video rounded-2xl flex flex-col items-center justify-center mb-4 relative overflow-hidden"
+                style={{
+                  background: "linear-gradient(135deg, #1c1c1e 0%, #2c2c2e 100%)",
+                  border: "1px solid rgba(255,255,255,0.1)",
+                }}
+              >
+                <div className="text-5xl mb-3">🎮</div>
+                <p className="text-white text-lg font-bold mb-1">SimOS Pro</p>
+                <p className="text-white/60 text-xs">解鎖無限重置・進階情報</p>
+                {/* 廣告倒數計時覆蓋層 */}
+                {!adCompleted && (
+                  <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center">
+                    <div className="text-white text-4xl font-bold mb-2">{adCountdown}</div>
+                    <p className="text-white/60 text-xs">廣告播放中...</p>
+                  </div>
+                )}
+              </div>
+              <p className="text-white/40 text-[10px] text-center leading-relaxed">
+                {adCompleted
+                  ? "✓ 廣告播放完畢，即將開始重置..."
+                  : "觀看完整廣告後即可免費重置對話"}
+              </p>
+            </div>
+            {/* 廣告底部（不可關閉，必須看完） */}
+            <div className="px-6 py-4 border-t border-white/10 w-full">
+              <p className="text-white/30 text-[10px] text-center">
+                廣告 · {adCompleted ? "已完成" : `剩餘 ${adCountdown} 秒`}
+              </p>
+            </div>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>

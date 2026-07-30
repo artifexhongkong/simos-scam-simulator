@@ -119,24 +119,50 @@ jobs:
                       controller.hide(WindowInsetsCompat.Type.systemBars());
                   }
 
-                  // 延遲禁用 WebView 長按事件（修正文字選取手柄黑色鏤空問題）
+                  // 延遲禁用 WebView 的長按與文字選取（修正選取手柄顯示問題）
                   // Capacitor 的 WebView 在 super.onCreate() 後才建立，需 postDelayed
                   new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                      // 方法 1：透過 bridge 取得 WebView
-                      if (this.bridge != null && this.bridge.getWebView() != null) {
-                          WebView webView = this.bridge.getWebView();
-                          webView.setOnLongClickListener(new View.OnLongClickListener() {
-                              @Override
-                              public boolean onLongClick(View v) {
-                                  return true; // 消費長按事件，不彈出選取手柄
-                              }
-                          });
-                          webView.setLongClickable(false);
-                      }
-                      // 方法 2：遞迴遍歷 View 樹找出所有 WebView
-                      View root = getWindow().getDecorView();
-                      disableLongClickRecursive(root);
+                      applyWebViewSelectionFix();
                   }, 500);
+                  // 再次延遲執行（確保頁面載入後也能生效）
+                  new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                      applyWebViewSelectionFix();
+                  }, 2000);
+              }
+
+              /** 全面禁用 WebView 文字選取 */
+              private void applyWebViewSelectionFix() {
+                  // 方法 1：透過 bridge 取得 WebView
+                  if (this.bridge != null && this.bridge.getWebView() != null) {
+                      configureWebView(this.bridge.getWebView());
+                  }
+                  // 方法 2：遞迴遍歷 View 樹找出所有 WebView
+                  View root = getWindow().getDecorView();
+                  disableLongClickRecursive(root);
+              }
+
+              /** 配置 WebView：禁用長按 + 注入 JS 禁用選取 */
+              private void configureWebView(WebView webView) {
+                  // 1. 禁用長按（防止彈出選取手柄）
+                  webView.setOnLongClickListener(new View.OnLongClickListener() {
+                      @Override
+                      public boolean onLongClick(View v) {
+                          return true; // 消費事件
+                      }
+                  });
+                  webView.setLongClickable(false);
+
+                  // 2. 注入 JS 禁用 contextmenu 與 selectionchange（不覆寫 WebViewClient）
+                  // 用 evaluateJavascript 直接注入，避免破壞 Capacitor 的 WebViewClient
+                  String js = "(function(){" +
+                      "document.addEventListener('contextmenu',function(e){e.preventDefault();return false;},true);" +
+                      "document.addEventListener('selectstart',function(e){" +
+                      "  var t=e.target;" +
+                      "  if(t && (t.tagName==='INPUT'||t.tagName==='TEXTAREA')){return true;}" +
+                      "  e.preventDefault();return false;" +
+                      "},true);" +
+                      "})();";
+                  webView.evaluateJavascript(js, null);
               }
 
               /** 遞迴遍歷 View 樹，禁用所有 WebView 的長按 */

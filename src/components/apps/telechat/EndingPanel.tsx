@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Trophy, UserX, AlertCircle, RotateCcw, Download, X, CheckCircle2 } from "lucide-react";
+import { Trophy, UserX, AlertCircle, RotateCcw, Download, X, CheckCircle2, PlayCircle } from "lucide-react";
 import type { NpcProfile } from "@/lib/game/npcs";
 import type { ConversationState } from "@/lib/game/store";
 
@@ -10,10 +10,10 @@ interface EndingPanelProps {
   conv: ConversationState;
   onClose: () => void;
   onReset: () => void;
-  hasReset?: boolean;
+  resetCount?: number;
 }
 
-export function EndingPanel({ npc, conv, onClose, onReset, hasReset }: EndingPanelProps) {
+export function EndingPanel({ npc, conv, onClose, onReset, resetCount = 0 }: EndingPanelProps) {
   const isSuccess = conv.status === "succeeded";
   const isBlocked = conv.status === "blocked";
   const isCautious = conv.status === "cautious";
@@ -188,14 +188,20 @@ export function EndingPanel({ npc, conv, onClose, onReset, hasReset }: EndingPan
           >
             關閉
           </button>
-          {!hasReset && (
-            <button
-              onClick={onReset}
-              className="flex-1 py-2.5 rounded-xl bg-blue-500 text-white text-sm font-semibold hover:bg-blue-600 active:scale-95 transition flex items-center justify-center gap-1.5"
-            >
-              <RotateCcw className="w-3.5 h-3.5" /> 再騙一次
-            </button>
-          )}
+          <button
+            onClick={onReset}
+            className="flex-1 py-2.5 rounded-xl bg-blue-500 text-white text-sm font-semibold hover:bg-blue-600 active:scale-95 transition flex items-center justify-center gap-1.5"
+          >
+            {resetCount === 0 ? (
+              <>
+                <RotateCcw className="w-3.5 h-3.5" /> 再騙一次
+              </>
+            ) : (
+              <>
+                <PlayCircle className="w-3.5 h-3.5" /> 看廣告再騙
+              </>
+            )}
+          </button>
         </div>
       </motion.div>
     </motion.div>

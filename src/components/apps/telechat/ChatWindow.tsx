@@ -623,7 +623,7 @@ export function ChatWindow({ npc, onBack }: { npc: NpcProfile; onBack: () => voi
                 placeholder="iMessage"
                 rows={1}
                 disabled={thinking}
-                className="flex-1 max-h-24 resize-none bg-transparent px-3 py-1.5 text-[15px] leading-[20px] focus:outline-none disabled:opacity-50"
+                className="flex-1 max-h-24 resize-none bg-transparent px-3 py-1.5 text-[16px] leading-[20px] focus:outline-none disabled:opacity-50"
                 style={{
                   color: "var(--im-input-text)",
                   minHeight: "32px",

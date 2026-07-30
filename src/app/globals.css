@@ -170,15 +170,15 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
-    -webkit-tap-highlight-color: transparent;
     box-sizing: border-box;
+    /* LinguaVerse 風格：只保留 tap-highlight transparent，不設 user-select */
+    -webkit-tap-highlight-color: transparent;
   }
   html, body {
     margin: 0;
     padding: 0;
     background: #000;
     overflow: hidden;
-    /* 100% 確保 html/body 完全等於 viewport */
     height: 100%;
     width: 100%;
   }
@@ -188,41 +188,24 @@
     touch-action: manipulation;
   }
 
-  /* ===== 文字選取設定（參考 ZAI-Assistant 專案）===== */
-  /* 所有文字可選取（長按可選取訊息內容、複製） */
-  * {
-    -webkit-user-select: text;
-    user-select: text;
-    -webkit-touch-callout: default;
-    -webkit-tap-highlight-color: transparent;
-  }
-
-  /* UI 互動元素禁用選取（按鈕、導航等） */
-  button, a, [role="button"], nav, header, footer,
-  .select-none, [class*="select-none"] {
-    -webkit-user-select: none;
-    user-select: none;
-    -webkit-touch-callout: none;
-  }
-
-  /* 輸入框設定 */
+  /* LinguaVerse 風格的 input/textarea：
+     -webkit-appearance: none 移除原生樣式
+     不設 user-select（讓瀏覽器預設 text 生效）
+     font-size: 16px 防 iOS 放大 */
   input, textarea {
-    -webkit-user-select: text;
-    user-select: text;
-    -webkit-touch-callout: default;
-    /* iOS 藍色游標 */
-    caret-color: #007aff;
-    /* 防止 iOS 自動放大 */
+    -webkit-appearance: none;
+    appearance: none;
+    font-family: inherit;
     font-size: 16px;
   }
 
-  /* 選取範圍顏色（iOS 藍半透明） */
+  /* 選取範圍顏色（iOS 藍半透明）— LinguaVerse 用 ::selection 全域設定 */
   ::selection {
-    background-color: rgba(0, 122, 255, 0.25);
+    background-color: rgba(0, 122, 255, 0.3);
     color: inherit;
   }
   ::-moz-selection {
-    background-color: rgba(0, 122, 255, 0.25);
+    background-color: rgba(0, 122, 255, 0.3);
     color: inherit;
   }
 

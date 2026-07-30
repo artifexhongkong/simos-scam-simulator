@@ -154,14 +154,15 @@ APK 打包透過 GitHub Actions 自動執行：
 
 | 版本 | 主要更新 |
 |------|----------|
-| v1.51 | 套用 ZAI-Assistant 專案的選取手柄方案：允許長按選取文字、CSS `::selection` 控制選取範圍顏色（iOS 藍半透明）、移除長按禁用 |
-| v1.50 | 移除所有無效的 drawable 覆寫（WebView 用 Chromium 自己的手柄，無法自訂） |
+| v1.52 | 套用 LinguaVerse 專案的極簡輸入框做法：MainActivity 不覆寫 WebView、不移除長按、不注入 JS；CSS 只保留 `-webkit-appearance: none` + `::selection` + `font-size: 16px` |
+| v1.51 | 套用 ZAI-Assistant 專案的選取手柄方案 |
+| v1.50 | 移除所有無效的 drawable 覆寫 |
 | v1.49 | 嘗試用 PNG drawable 取代 vector drawable（對 WebView 無效） |
 | v1.47 | README 加入 APK 下載連結、版本自動同步機制 |
-| v1.46 | 修正選取手柄顯示問題（CSS+JS 方案）、重新開始按鈕加入廣告機制（首次免費，之後看廣告） |
-| v1.45 | 程序化 NPC 產生器（下拉刷新產生全新目標）、Dock 圖示透明度修正 |
+| v1.46 | 修正選取手柄顯示問題（CSS+JS 方案）、重新開始按鈕加入廣告機制 |
+| v1.45 | 程序化 NPC 產生器、Dock 圖示透明度修正 |
 | v1.43 | 情報販子改進：移除已完成目標、下拉刷新、補給站 |
-| v1.40 | 基礎版本：8 位內建 NPC、TeleChat 對話、排行榜 |
+| v1.40 | 基礎版本 |
 
 ## 授權
 

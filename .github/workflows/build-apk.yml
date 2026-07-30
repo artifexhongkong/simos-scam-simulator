@@ -92,11 +92,6 @@ jobs:
           package com.simos.scamsim;
 
           import android.os.Bundle;
-          import android.os.Handler;
-          import android.os.Looper;
-          import android.view.View;
-          import android.webkit.WebView;
-          import android.view.WindowManager;
           import android.os.Build;
           import androidx.core.view.WindowCompat;
           import androidx.core.view.WindowInsetsControllerCompat;
@@ -104,6 +99,13 @@ jobs:
 
           import com.getcapacitor.BridgeActivity;
 
+          /**
+           * Main Capacitor activity.
+           *
+           * 參考 LinguaVerse 專案的極簡做法：
+           * 不覆寫 WebView 的長按、不注入 JS、不自訂選取手柄 drawable。
+           * 讓 WebView 用系統預設行為，CSS ::selection 控制選取範圍顏色。
+           */
           public class MainActivity extends BridgeActivity {
               @Override
               protected void onCreate(Bundle savedInstanceState) {
@@ -118,21 +120,6 @@ jobs:
                       controller.setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
                       controller.hide(WindowInsetsCompat.Type.systemBars());
                   }
-
-                  // 延遲設定 WebView：允許長按選取文字（參考 ZAI-Assistant 專案）
-                  // 不禁用長按，讓系統預設的選取行為生效
-                  // 選取範圍顏色由 CSS ::selection 控制（iOS 藍半透明）
-                  // 選取手柄用系統預設（無法自訂，但行為正常）
-                  new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                      if (this.bridge != null && this.bridge.getWebView() != null) {
-                          WebView webView = this.bridge.getWebView();
-                          // 允許長按選取（與 ZAI-Assistant 一致）
-                          webView.setOnLongClickListener(null);
-                          webView.setLongClickable(true);
-                          webView.setHapticFeedbackEnabled(true);
-                          webView.requestFocus(View.FOCUS_DOWN);
-                      }
-                  }, 500);
               }
 
               @Override

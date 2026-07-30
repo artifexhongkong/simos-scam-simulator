@@ -86,7 +86,7 @@ export function HomeScreen({ onOpenApp }: { onOpenApp: (app: AppName) => void })
     {
       key: "browser",
       label: "瀏覽器",
-      icon: <Compass className="w-6 h-6 text-white" strokeWidth={2} />,
+      icon: <Compass className="w-6 h-6 text-white" strokeWidth={2} fill="white" />,
       bg: "linear-gradient(135deg, #007aff 0%, #0040dd 100%)",
     },
   ];
@@ -249,7 +249,7 @@ export function HomeScreen({ onOpenApp }: { onOpenApp: (app: AppName) => void })
               aria-label={app.label}
             >
               <div
-                className="w-[50px] h-[50px] flex items-center justify-center opacity-60"
+                className="w-[50px] h-[50px] flex items-center justify-center"
                 style={{ background: app.bg, borderRadius: "12px" }}
               >
                 {app.icon}

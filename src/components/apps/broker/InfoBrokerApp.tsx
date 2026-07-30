@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Lock, CheckCircle2, Eye, Skull, Fingerprint, Copy, Check, Coins, ChevronUp, Zap, TrendingUp } from "lucide-react";
+import { Lock, CheckCircle2, Eye, Skull, Fingerprint, Copy, Check, Coins, ChevronUp, Zap, TrendingUp, RefreshCw } from "lucide-react";
 import { useGameStore } from "@/lib/game/store";
 import { NPCS, type NpcProfile } from "@/lib/game/npcs";
 
@@ -22,17 +22,45 @@ export function InfoBrokerApp({ onBack }: { onBack: () => void }) {
   const [activeNpc, setActiveNpc] = useState<NpcProfile | null>(null);
   const [purchasing, setPurchasing] = useState(false);
   const [showShop, setShowShop] = useState(false);
-  const [shuffleKey, setShuffleKey] = useState(0); // 用於觸發隨機更換
+  const [shuffleKey, setShuffleKey] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
 
-  // 每 15 秒隨機更換未知目標的 emoji（模擬其他玩家正在選擇）
+  // 每 15 秒隨機更換未知目標的 emoji
   useEffect(() => {
-    const id = setInterval(() => {
-      setShuffleKey(k => k + 1);
-    }, 15000);
+    const id = setInterval(() => setShuffleKey(k => k + 1), 15000);
     return () => clearInterval(id);
   }, []);
 
-  // 隨機未知目標的 emoji（特質保持與 NPC 真實 hookTags 一致）
+  // 下拉刷新
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const touchStartY = useRef(0);
+  const [pullDistance, setPullDistance] = useState(0);
+
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (scrollRef.current && scrollRef.current.scrollTop === 0) {
+      touchStartY.current = e.touches[0].clientY;
+    }
+  }, []);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (touchStartY.current === 0) return;
+    const diff = e.touches[0].clientY - touchStartY.current;
+    if (diff > 0 && scrollRef.current && scrollRef.current.scrollTop === 0) {
+      setPullDistance(Math.min(diff * 0.5, 80));
+    }
+  }, []);
+
+  const handleTouchEnd = useCallback(() => {
+    if (pullDistance > 60) {
+      setRefreshing(true);
+      setShuffleKey(k => k + 1);
+      setTimeout(() => setRefreshing(false), 800);
+    }
+    setPullDistance(0);
+    touchStartY.current = 0;
+  }, [pullDistance]);
+
+  // 隨機未知目標的 emoji
   const unknownEmojis = ["🔒", "❓", "👤", "🎭", "🕵️", "💀", "🫥", "🔇"];
   const getUnknownEmoji = (npcId: string) => {
     const seed = npcId.charCodeAt(0) + shuffleKey;
@@ -127,14 +155,36 @@ export function InfoBrokerApp({ onBack }: { onBack: () => void }) {
         )}
       </AnimatePresence>
 
-      {/* 目標列表 - 已詐騙成功的移除，已購買的往上排 */}
-      <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-3 scroll-safe-bottom">
-        <p className="text-xs px-1" style={{ color: textSub }}>可購買的情報（風控值影響價格）</p>
+      {/* 目標列表 - 已完成(成功/封鎖/警覺)的移除，已購買的往上排，支援下拉刷新 */}
+      <div
+        ref={scrollRef}
+        className="flex-1 min-h-0 overflow-y-auto p-3 space-y-3 scroll-safe-bottom"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
+        {/* 下拉刷新指示器 */}
+        {(pullDistance > 0 || refreshing) && (
+          <div className="flex items-center justify-center py-2" style={{ height: refreshing ? 40 : pullDistance }}>
+            <RefreshCw
+              className={`w-5 h-5 ${refreshing ? "animate-spin" : ""}`}
+              style={{ color: textSub, transform: `rotate(${pullDistance * 3}deg)` }}
+            />
+            <span className="ml-2 text-[11px]" style={{ color: textSub }}>
+              {refreshing ? "刷新中..." : pullDistance > 60 ? "鬆開刷新" : "下拉刷新"}
+            </span>
+          </div>
+        )}
+
+        <p className="text-xs px-1" style={{ color: textSub }}>可購買的情報（風控值影響價格·下拉刷新）</p>
         {NPCS
           .filter((npc) => {
-            // 移除已詐騙成功的 NPC
+            // 移除已成功詐騙、被封鎖、警覺終止的 NPC
             const conv = conversations[npc.id];
-            return conv?.status !== "succeeded";
+            if (conv?.status === "succeeded") return false;
+            if (conv?.status === "blocked") return false;
+            if (conv?.status === "cautious") return false;
+            return true;
           })
           .sort((a, b) => {
             // 已購買普通料子的往上移

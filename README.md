@@ -154,15 +154,16 @@ APK 打包透過 GitHub Actions 自動執行：
 
 | 版本 | 主要更新 |
 |------|----------|
-| v1.53 | **選取手柄黑色背板修復**：styles.xml 的 `windowBackground` 從黑色改為白色，capacitor `backgroundColor` 從 #000000 改為 #ffffff。這是黑色背板的根本原因 |
-| v1.52 | 套用 LinguaVerse 專案的極簡輸入框做法 |
-| v1.51 | 套用 ZAI-Assistant 專案的選取手柄方案 |
-| v1.50 | 移除所有無效的 drawable 覆寫 |
-| v1.49 | 嘗試用 PNG drawable 取代 vector drawable（對 WebView 無效） |
-| v1.47 | README 加入 APK 下載連結、版本自動同步機制 |
-| v1.46 | 修正選取手柄顯示問題（CSS+JS 方案）、重新開始按鈕加入廣告機制 |
-| v1.45 | 程序化 NPC 產生器、Dock 圖示透明度修正 |
-| v1.43 | 情報販子改進：移除已完成目標、下拉刷新、補給站 |
+| v1.54 | **選取手柄背板真正修復**：`android:background` 設為 `@null`（透明），移除 `windowBackground`、`statusBarColor`、`navigationBarColor`。移除 capacitor `backgroundColor`。完全比照 LinguaVerse 做法讓背景透明 |
+| v1.53 | windowBackground 黑→白（無效，背板還在） |
+| v1.52 | 套用 LinguaVerse 極簡輸入框做法 |
+| v1.51 | 套用 ZAI-Assistant 選取手柄方案 |
+| v1.50 | 移除無效 drawable 覆寫 |
+| v1.49 | 嘗試 PNG drawable（無效） |
+| v1.47 | README APK 下載連結 |
+| v1.46 | 選取手柄 CSS+JS、重新開始廣告機制 |
+| v1.45 | 程序化 NPC 產生器、Dock 圖示修正 |
+| v1.43 | 情報販子改進 |
 | v1.40 | 基礎版本 |
 
 ## 授權

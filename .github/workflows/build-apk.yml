@@ -370,3 +370,36 @@ jobs:
           draft: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update README version & download link
+        if: github.ref == 'refs/heads/main'
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          TAG="v${VERSION}"
+          APK_FILE="SimOS_v${VERSION}.apk"
+          APK_URL="https://github.com/${{ github.repository }}/releases/download/${TAG}/${APK_FILE}"
+
+          echo "Updating README to $TAG"
+          echo "APK URL: $APK_URL"
+
+          # 更新 README 中的版本號與下載連結
+          sed -i "s|\*\*最新版本：v[0-9.]*\*\*|**最新版本：$TAG**|g" README.md
+          sed -i "s|badge/Download-SimOS_v[0-9.]*\.apk|badge/Download-SimOS_${TAG}.apk|g" README.md
+          sed -i "s|releases/download/v[0-9.]*/SimOS_v[0-9.]*\.apk|releases/download/${TAG}/${APK_FILE}|g" README.md
+          sed -i "s|SimOS_v[0-9.]*\.apk|${APK_FILE}|g" README.md
+
+          echo "=== Updated lines ==="
+          grep -n "最新版本" README.md | head -3
+          grep -n "Download-SimOS" README.md | head -3
+
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          if git diff --quiet README.md; then
+            echo "No changes to README"
+          else
+            git add README.md
+            git commit -m "docs: auto-update README to $TAG"
+            git push
+            echo "README updated and pushed for $TAG"
+          fi

@@ -6,14 +6,14 @@
 
 ## 📱 下載 APK
 
-**最新版本：v1.46**
+**最新版本：v1.47**
 
-[![Download APK](https://img.shields.io/badge/Download-SimOS_v1.46.apk-blue?style=for-the-badge&logo=android)](https://github.com/artifexhongkong/simos-scam-simulator/releases/download/v1.46/SimOS_v1.46.apk)
+[![Download APK](https://img.shields.io/badge/Download-SimOS_v1.47.apk-blue?style=for-the-badge&logo=android)](https://github.com/artifexhongkong/simos-scam-simulator/releases/download/v1.47/SimOS_v1.47.apk)
 
 > 所有版本：[Releases 頁面](https://github.com/artifexhongkong/simos-scam-simulator/releases)
 
 ### 安裝方式
-1. 點擊上方按鈕下載 `SimOS_v1.46.apk`
+1. 點擊上方按鈕下載 `SimOS_v1.47.apk`
 2. 在 Android 手機上允許「安裝未知來源應用」
 3. 開啟 APK 檔案安裝
 4. 安裝完成後開啟「SimOS」即可遊玩
@@ -154,6 +154,7 @@ APK 打包透過 GitHub Actions 自動執行：
 
 | 版本 | 主要更新 |
 |------|----------|
+| v1.47 | README 加入 APK 下載連結、版本自動同步機制 |
 | v1.46 | 修正選取手柄顯示問題（CSS+JS 方案）、重新開始按鈕加入廣告機制（首次免費，之後看廣告） |
 | v1.45 | 程序化 NPC 產生器（下拉刷新產生全新目標）、Dock 圖示透明度修正 |
 | v1.43 | 情報販子改進：移除已完成目標、下拉刷新、補給站 |

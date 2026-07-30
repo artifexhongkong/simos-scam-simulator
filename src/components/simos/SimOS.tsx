@@ -7,6 +7,7 @@ import { TeleChatApp } from "@/components/apps/telechat/TeleChatApp";
 import { InfoBrokerApp } from "@/components/apps/broker/InfoBrokerApp";
 import { LeaderboardApp } from "@/components/apps/leaderboard/LeaderboardApp";
 import { SettingsApp } from "@/components/apps/settings/SettingsApp";
+import { DebugFloatingButton } from "@/components/debug/DebugFloatingButton";
 import { useGameStore } from "@/lib/game/store";
 import { useEffect, useState } from "react";
 
@@ -61,6 +62,9 @@ export function SimOS() {
         {activeApp === "broker" && <InfoBrokerApp onBack={() => setActiveApp("home")} />}
         {activeApp === "leaderboard" && <LeaderboardApp onBack={() => setActiveApp("home")} />}
         {activeApp === "settings" && <SettingsApp onBack={() => setActiveApp("home")} />}
+
+        {/* Debug 浮窗按鈕（懸浮在所有頁面之上） */}
+        <DebugFloatingButton />
       </AppShell>
     </PhoneFrame>
   );

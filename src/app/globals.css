@@ -171,8 +171,11 @@
   * {
     @apply border-border outline-ring/50;
     box-sizing: border-box;
-    /* LinguaVerse 風格：只保留 tap-highlight transparent，不設 user-select */
     -webkit-tap-highlight-color: transparent;
+    /* 預設所有元素不可選取文字（還原真實手機 App 效果） */
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
   }
   html, body {
     margin: 0;
@@ -188,18 +191,18 @@
     touch-action: manipulation;
   }
 
-  /* LinguaVerse 風格的 input/textarea：
-     -webkit-appearance: none 移除原生樣式
-     不設 user-select（讓瀏覽器預設 text 生效）
-     font-size: 16px 防 iOS 放大 */
+  /* 只有輸入框可以選取文字（對話框、TeleChat ID 輸入框等） */
   input, textarea {
     -webkit-appearance: none;
     appearance: none;
     font-family: inherit;
     font-size: 16px;
+    -webkit-user-select: text;
+    user-select: text;
+    -webkit-touch-callout: default;
   }
 
-  /* 選取範圍顏色（iOS 藍半透明）— LinguaVerse 用 ::selection 全域設定 */
+  /* 選取範圍顏色（iOS 藍半透明） */
   ::selection {
     background-color: rgba(0, 122, 255, 0.3);
     color: inherit;

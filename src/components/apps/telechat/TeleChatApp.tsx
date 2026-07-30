@@ -4,7 +4,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { UserPlus, Search, UserX, AlertTriangle, CheckCircle2, Lock, ChevronUp } from "lucide-react";
 import { useGameStore } from "@/lib/game/store";
-import { NPCS, getNpcById } from "@/lib/game/npcs";
+import { NPCS, getAllNpcs, getNpcById } from "@/lib/game/npcs";
 import { useShallow } from "zustand/react/shallow";
 import { ChatWindow } from "./ChatWindow";
 
@@ -12,16 +12,18 @@ export function TeleChatApp({ onBack }: { onBack: () => void }) {
   const [mode, setMode] = useState<"list" | "add" | "chat">("list");
   const [activeNpcId, setActiveNpcId] = useState<string | null>(null);
 
-  const { friendNpcIds, conversations, startConversation, addFriend } = useGameStore(
+  const { friendNpcIds, conversations, startConversation, addFriend, generatedNpcs } = useGameStore(
     useShallow((s) => ({
       friendNpcIds: s.friendNpcIds,
       conversations: s.conversations,
       startConversation: s.startConversation,
       addFriend: s.addFriend,
+      generatedNpcs: s.generatedNpcs,
     })),
   );
 
-  const friends = NPCS.filter((n) => friendNpcIds.includes(n.id))
+  const allNpcs = getAllNpcs(generatedNpcs);
+  const friends = allNpcs.filter((n) => friendNpcIds.includes(n.id))
     .sort((a, b) => {
       // 排序規則：
       // 1. 已詐騙成功的排最後（不移除但降序）
@@ -45,7 +47,7 @@ export function TeleChatApp({ onBack }: { onBack: () => void }) {
   };
 
   if (mode === "chat" && activeNpcId) {
-    const npc = getNpcById(activeNpcId);
+    const npc = getNpcById(activeNpcId, generatedNpcs);
     if (!npc) {
       setMode("list");
       return null;

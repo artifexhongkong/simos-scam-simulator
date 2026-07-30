@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
-import { NPCS, getNpcById, type NpcProfile } from "./npcs";
+import { NPCS, getAllNpcs, getNpcById, type NpcProfile } from "./npcs";
 
 export interface ChatMessage {
   id: string;
@@ -55,6 +55,9 @@ export interface GameState {
   // 已加為好友的 NPC ID
   friendNpcIds: string[];
 
+  // 程序化產生的 NPC（情報販子下拉刷新時產生）
+  generatedNpcs: NpcProfile[];
+
   // 對話歷史
   conversations: Record<string, ConversationState>;
 
@@ -83,6 +86,8 @@ export interface GameState {
   resetConversation: (npcId: string) => void;
   refreshRivals: () => void;
   resetGame: () => void;
+  // 程序化 NPC 操作
+  addGeneratedNpcs: (npcs: NpcProfile[]) => void;
 }
 
 const INITIAL_DARK_COIN = 200;
@@ -144,6 +149,7 @@ export const useGameStore = create<GameState>()(
       unlockedNpcIds: [],
       premiumNpcIds: [],
       friendNpcIds: [],
+      generatedNpcs: [],
       conversations: {},
       rivalSnapshot: {},
       lastRivalUpdate: 0,
@@ -185,9 +191,9 @@ export const useGameStore = create<GameState>()(
       },
 
       purchaseIntel: (npcId, premium) => {
-        const npc = getNpcById(npcId);
-        if (!npc) return false;
         const s = get();
+        const npc = getNpcById(npcId, s.generatedNpcs);
+        if (!npc) return false;
         const priceMultiplier = 1 + (s.riskLevel / 100);
         const basePrice = premium ? npc.price * 2 : npc.price;
         const actualPrice = Math.ceil(basePrice * priceMultiplier);
@@ -214,9 +220,9 @@ export const useGameStore = create<GameState>()(
       addFriend: (telechatId) => {
         const tid = telechatId.trim();
         if (!tid) return { ok: false, error: "請輸入 TeleChat ID" };
-        const npc = NPCS.find((n) => n.telechatId === tid);
-        if (!npc) return { ok: false, error: "查無此 ID，請確認情報是否正確" };
         const s = get();
+        const npc = getAllNpcs(s.generatedNpcs).find((n) => n.telechatId === tid);
+        if (!npc) return { ok: false, error: "查無此 ID，請確認情報是否正確" };
         if (!s.unlockedNpcIds.includes(npc.id)) {
           return { ok: false, error: "你還沒購買此目標的情報" };
         }
@@ -230,7 +236,7 @@ export const useGameStore = create<GameState>()(
       startConversation: (npcId) => {
         const s = get();
         if (s.conversations[npcId]) return;
-        const npc = getNpcById(npcId);
+        const npc = getNpcById(npcId, s.generatedNpcs);
         if (!npc) return;
         const newConv: ConversationState = {
           npcId,
@@ -318,7 +324,7 @@ export const useGameStore = create<GameState>()(
 
       resetConversation: (npcId) =>
         set((s) => {
-          const npc = getNpcById(npcId);
+          const npc = getNpcById(npcId, s.generatedNpcs);
           if (!npc) return {};
           const newConv: ConversationState = {
             npcId,
@@ -356,6 +362,20 @@ export const useGameStore = create<GameState>()(
         });
       },
 
+      addGeneratedNpcs: (npcs) =>
+        set((s) => {
+          // 保留已解鎖的 generated NPC，移除未解鎖的舊 NPC，加入新的
+          const purchasedGen = s.generatedNpcs.filter((n) =>
+            s.unlockedNpcIds.includes(n.id)
+          );
+          // 新的未解鎖 NPC（最多保留 6 個未解鎖的，避免列表過長）
+          const newUnpurchased = npcs.filter((n) => !s.unlockedNpcIds.includes(n.id));
+          const allUnpurchased = newUnpurchased.slice(0, 6);
+          return {
+            generatedNpcs: [...purchasedGen, ...allUnpurchased],
+          };
+        }),
+
       resetGame: () => {
         // 先清除 localStorage（避免 persist middleware 覆蓋回來）
         if (typeof window !== "undefined") {
@@ -382,6 +402,7 @@ export const useGameStore = create<GameState>()(
           unlockedNpcIds: [],
           premiumNpcIds: [],
           friendNpcIds: [],
+          generatedNpcs: [],
           conversations: {},
           rivalSnapshot: {},
           lastRivalUpdate: 0,

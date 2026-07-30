@@ -25,12 +25,17 @@ export interface NpcProfile {
 // 從 JSON 載入（過濾 _comment / _schema 等中繼欄位）
 export const NPCS: NpcProfile[] = (npcData as { npcs: NpcProfile[] }).npcs;
 
-export function getNpcByTelechatId(tid: string): NpcProfile | undefined {
-  return NPCS.find((n) => n.telechatId === tid);
+// 取得所有 NPC（含靜態 + 程序化產生的）
+export function getAllNpcs(extraNpcs: NpcProfile[] = []): NpcProfile[] {
+  return [...NPCS, ...extraNpcs];
 }
 
-export function getNpcById(id: string): NpcProfile | undefined {
-  return NPCS.find((n) => n.id === id);
+export function getNpcByTelechatId(tid: string, extraNpcs: NpcProfile[] = []): NpcProfile | undefined {
+  return getAllNpcs(extraNpcs).find((n) => n.telechatId === tid);
+}
+
+export function getNpcById(id: string, extraNpcs: NpcProfile[] = []): NpcProfile | undefined {
+  return getAllNpcs(extraNpcs).find((n) => n.id === id);
 }
 
 // 虛擬排行榜上的對手

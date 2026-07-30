@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft,
@@ -15,6 +15,7 @@ import {
   AlertTriangle,
   Globe,
   User,
+  PlayCircle,
 } from "lucide-react";
 import { useGameStore } from "@/lib/game/store";
 
@@ -24,20 +25,22 @@ export function DarkNetApp({ onBack }: { onBack: () => void }) {
   const [page, setPage] = useState<Page>("home");
   const [url, setUrl] = useState("darknet://home");
   const [showPurchaseResult, setShowPurchaseResult] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [showAdModal, setShowAdModal] = useState(false);
 
   const darkCoin = useGameStore((s) => s.darkCoin);
   const riskLevel = useGameStore((s) => s.riskLevel);
   const alias = useGameStore((s) => s.alias);
   const buyPhoneNumber = useGameStore((s) => s.buyPhoneNumber);
+  const buyPhoneNumberByAd = useGameStore((s) => s.buyPhoneNumberByAd);
 
-  const PHONE_PRICE = 150;
+  const PHONE_PRICE = 350;
 
   const navigate = (target: Page, newUrl: string) => {
     setPage(target);
     setUrl(newUrl);
   };
 
-  const handleBuyPhone = () => {
+  const handleBuyWithDrc = () => {
     const result = buyPhoneNumber();
     if (result.ok) {
       setShowPurchaseResult({
@@ -51,6 +54,22 @@ export function DarkNetApp({ onBack }: { onBack: () => void }) {
       });
     }
     setTimeout(() => setShowPurchaseResult(null), 4000);
+  };
+
+  const handleBuyWithAd = () => {
+    setShowAdModal(true);
+  };
+
+  const handleAdComplete = () => {
+    const result = buyPhoneNumberByAd();
+    setShowAdModal(false);
+    if (result.ok) {
+      setShowPurchaseResult({
+        ok: true,
+        msg: `廣告兌換成功！新代號：${result.newAlias}。風控值已重置為 0。`,
+      });
+      setTimeout(() => setShowPurchaseResult(null), 4000);
+    }
   };
 
   return (
@@ -103,11 +122,19 @@ export function DarkNetApp({ onBack }: { onBack: () => void }) {
             darkCoin={darkCoin}
             riskLevel={riskLevel}
             alias={alias}
-            onBuy={handleBuyPhone}
+            onBuyDrc={handleBuyWithDrc}
+            onBuyAd={handleBuyWithAd}
             phonePrice={PHONE_PRICE}
           />
         )}
       </div>
+
+      {/* 廣告彈窗 */}
+      <AdModal
+        visible={showAdModal}
+        onComplete={handleAdComplete}
+        onClose={() => setShowAdModal(false)}
+      />
 
       {/* 購買結果 Toast */}
       <AnimatePresence>
@@ -327,16 +354,18 @@ function PhoneShopPage({
   darkCoin,
   riskLevel,
   alias,
-  onBuy,
+  onBuyDrc,
+  onBuyAd,
   phonePrice,
 }: {
   darkCoin: number;
   riskLevel: number;
   alias: string;
-  onBuy: () => void;
+  onBuyDrc: () => void;
+  onBuyAd: () => void;
   phonePrice: number;
 }) {
-  const [confirming, setConfirming] = useState(false);
+  const [confirming, setConfirming] = useState<"drc" | "ad" | null>(null);
   const canAfford = darkCoin >= phonePrice;
 
   return (
@@ -395,9 +424,6 @@ function PhoneShopPage({
             <h3 className="text-sm font-bold" style={{ color: "#ff9500" }}>免洗號碼套餐</h3>
             <p className="text-[10px]" style={{ color: "#8e8e93" }}>全新身份 + 風控歸零</p>
           </div>
-          <span className="text-lg font-bold" style={{ color: "#bf5af2" }}>
-            {phonePrice} DRC
-          </span>
         </div>
 
         <div className="space-y-1.5 mb-4">
@@ -415,28 +441,47 @@ function PhoneShopPage({
           ))}
         </div>
 
-        {/* 購買按鈕 */}
+        {/* 兩個購買按鈕 */}
         {!confirming ? (
-          <button
-            onClick={() => setConfirming(true)}
-            disabled={!canAfford}
-            className="w-full py-3 rounded-xl text-sm font-bold active:scale-95 transition disabled:opacity-40 flex items-center justify-center gap-2"
-            style={{
-              background: canAfford ? "#ff9500" : "#2c2c2e",
-              color: canAfford ? "#fff" : "#48484a",
-            }}
-          >
-            <ShoppingCart className="w-4 h-4" />
-            {canAfford ? "立即購買" : "DRC 不足"}
-          </button>
+          <div className="space-y-2">
+            {/* DRC 購買 */}
+            <button
+              onClick={() => setConfirming("drc")}
+              disabled={!canAfford}
+              className="w-full py-3 rounded-xl text-sm font-bold active:scale-95 transition disabled:opacity-40 flex items-center justify-center gap-2"
+              style={{
+                background: canAfford ? "#ff9500" : "#2c2c2e",
+                color: canAfford ? "#fff" : "#48484a",
+              }}
+            >
+              <ShoppingCart className="w-4 h-4" />
+              {canAfford ? `支付 ${phonePrice} DRC` : `DRC 不足（需 ${phonePrice}）`}
+            </button>
+
+            {/* 看廣告免費購買 */}
+            <button
+              onClick={() => setConfirming("ad")}
+              className="w-full py-3 rounded-xl text-sm font-bold active:scale-95 transition flex items-center justify-center gap-2"
+              style={{
+                background: "rgba(0,122,255,0.15)",
+                color: "#0a84ff",
+                border: "1px solid rgba(0,122,255,0.3)",
+              }}
+            >
+              <PlayCircle className="w-4 h-4" />
+              看廣告免費領取
+            </button>
+          </div>
         ) : (
           <div className="space-y-2">
-            <p className="text-[11px] text-center" style={{ color: "#ff9500" }}>
-              確認購買？將花費 {phonePrice} DRC
+            <p className="text-[11px] text-center" style={{ color: confirming === "drc" ? "#ff9500" : "#0a84ff" }}>
+              {confirming === "drc"
+                ? `確認支付 ${phonePrice} DRC？`
+                : "觀看 5 秒廣告後免費獲得新號碼？"}
             </p>
             <div className="flex gap-2">
               <button
-                onClick={() => setConfirming(false)}
+                onClick={() => setConfirming(null)}
                 className="flex-1 py-2.5 rounded-xl text-sm font-medium active:scale-95 transition"
                 style={{ background: "#2c2c2e", color: "#8e8e93" }}
               >
@@ -444,11 +489,15 @@ function PhoneShopPage({
               </button>
               <button
                 onClick={() => {
-                  onBuy();
-                  setConfirming(false);
+                  if (confirming === "drc") onBuyDrc();
+                  else onBuyAd();
+                  setConfirming(null);
                 }}
                 className="flex-1 py-2.5 rounded-xl text-sm font-bold active:scale-95 transition"
-                style={{ background: "#34c759", color: "#fff" }}
+                style={{
+                  background: confirming === "drc" ? "#34c759" : "#0a84ff",
+                  color: "#fff",
+                }}
               >
                 確認
               </button>
@@ -467,5 +516,89 @@ function PhoneShopPage({
         </p>
       </div>
     </div>
+  );
+}
+
+// 廣告彈窗
+function AdModal({
+  visible,
+  onComplete,
+  onClose,
+}: {
+  visible: boolean;
+  onComplete: () => void;
+  onClose: () => void;
+}) {
+  const [countdown, setCountdown] = useState(5);
+  const [completed, setCompleted] = useState(false);
+
+  // 廣告倒數計時
+  useEffect(() => {
+    if (!visible) return;
+    setCountdown(5);
+    setCompleted(false);
+    const timer = setInterval(() => {
+      setCountdown((c) => {
+        if (c <= 1) {
+          setCompleted(true);
+          clearInterval(timer);
+          return 0;
+        }
+        return c - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [visible]);
+
+  if (!visible) return null;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="absolute inset-0 z-[60] bg-black flex flex-col items-center justify-center"
+    >
+      <div className="flex-1 flex flex-col items-center justify-center p-6">
+        <div
+          className="w-full max-w-xs aspect-video rounded-2xl flex flex-col items-center justify-center mb-4 relative overflow-hidden"
+          style={{
+            background: "linear-gradient(135deg, #1c1c1e 0%, #2c2c2e 100%)",
+            border: "1px solid rgba(255,255,255,0.1)",
+          }}
+        >
+          <div className="text-5xl mb-3">📱</div>
+          <p className="text-white text-lg font-bold mb-1">黑網 Pro</p>
+          <p className="text-white/60 text-xs">無限免洗號碼・優先身份</p>
+          {!completed && (
+            <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center">
+              <div className="text-white text-4xl font-bold mb-2">{countdown}</div>
+              <p className="text-white/60 text-xs">廣告播放中...</p>
+            </div>
+          )}
+        </div>
+        <p className="text-white/40 text-[10px] text-center leading-relaxed">
+          {completed ? "✓ 廣告播放完畢" : "觀看完整廣告後即可免費獲得新號碼"}
+        </p>
+      </div>
+      <div className="px-6 py-4 border-t border-white/10 w-full">
+        {completed ? (
+          <button
+            onClick={onComplete}
+            className="w-full py-3 rounded-xl bg-emerald-500 text-white text-sm font-bold active:scale-95 transition"
+          >
+            領取新號碼
+          </button>
+        ) : (
+          <button
+            onClick={onClose}
+            className="w-full py-3 rounded-xl text-sm font-medium"
+            style={{ color: "rgba(255,255,255,0.3)" }}
+          >
+            廣告 · 剩餘 {countdown} 秒
+          </button>
+        )}
+      </div>
+    </motion.div>
   );
 }

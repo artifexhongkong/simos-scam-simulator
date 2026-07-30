@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { motion } from "framer-motion";
-import { UserPlus, Search, UserX, AlertTriangle, CheckCircle2, Lock, ChevronUp } from "lucide-react";
+import { useState, useRef, useCallback } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { UserPlus, Search, UserX, AlertTriangle, CheckCircle2, Lock, ChevronUp, Trash2, X } from "lucide-react";
 import { useGameStore } from "@/lib/game/store";
 import { NPCS, getAllNpcs, getNpcById } from "@/lib/game/npcs";
 import { useShallow } from "zustand/react/shallow";
@@ -11,16 +11,38 @@ import { ChatWindow } from "./ChatWindow";
 export function TeleChatApp({ onBack }: { onBack: () => void }) {
   const [mode, setMode] = useState<"list" | "add" | "chat">("list");
   const [activeNpcId, setActiveNpcId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [longPressActive, setLongPressActive] = useState<string | null>(null);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const { friendNpcIds, conversations, startConversation, addFriend, generatedNpcs } = useGameStore(
+  const { friendNpcIds, conversations, startConversation, addFriend, generatedNpcs, removeFriend } = useGameStore(
     useShallow((s) => ({
       friendNpcIds: s.friendNpcIds,
       conversations: s.conversations,
       startConversation: s.startConversation,
       addFriend: s.addFriend,
       generatedNpcs: s.generatedNpcs,
+      removeFriend: s.removeFriend,
     })),
   );
+
+  // 長按偵測
+  const handleTouchStart = useCallback((npcId: string) => {
+    longPressTimer.current = setTimeout(() => {
+      setLongPressActive(npcId);
+      // 震動回饋
+      if (typeof navigator !== "undefined" && navigator.vibrate) {
+        navigator.vibrate(30);
+      }
+    }, 500);
+  }, []);
+
+  const handleTouchEnd = useCallback(() => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  }, []);
 
   const allNpcs = getAllNpcs(generatedNpcs);
   const friends = allNpcs.filter((n) => friendNpcIds.includes(n.id))
@@ -124,17 +146,30 @@ export function TeleChatApp({ onBack }: { onBack: () => void }) {
               const isSucceeded = conv?.status === "succeeded";
               const isBlocked = conv?.status === "blocked";
               const isCautious = conv?.status === "cautious";
+              const showDelete = longPressActive === npc.id || deleteTarget === npc.id;
               return (
                 <motion.li
                   key={npc.id}
                   initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  whileTap={{ scale: 0.98 }}
-                  style={{ borderBottom: "1px solid var(--im-header-border)" }}
+                  animate={{ opacity: 1, x: 0, height: showDelete ? 0 : "auto" }}
+                  style={{ borderBottom: "1px solid var(--im-header-border)", overflow: "hidden" }}
                 >
                   <button
-                    onClick={() => openChat(npc.id)}
-                    className="w-full px-4 py-3 flex items-center gap-3 transition text-left"
+                    onClick={() => {
+                      if (showDelete) {
+                        setLongPressActive(null);
+                        setDeleteTarget(null);
+                      } else {
+                        openChat(npc.id);
+                      }
+                    }}
+                    onTouchStart={() => handleTouchStart(npc.id)}
+                    onTouchEnd={handleTouchEnd}
+                    onTouchMove={handleTouchEnd}
+                    onMouseDown={() => handleTouchStart(npc.id)}
+                    onMouseUp={handleTouchEnd}
+                    onMouseLeave={handleTouchEnd}
+                    className="w-full px-4 py-3 flex items-center gap-3 transition text-left active:bg-black/5"
                     style={{ background: "var(--im-bg)" }}
                   >
                     <div
@@ -183,6 +218,20 @@ export function TeleChatApp({ onBack }: { onBack: () => void }) {
                         )}
                       </div>
                     </div>
+                    {showDelete && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeleteTarget(npc.id);
+                          setLongPressActive(null);
+                        }}
+                        className="shrink-0 p-2 rounded-full active:scale-90 transition"
+                        style={{ background: "rgba(255,59,48,0.1)", color: "#ff3b30" }}
+                        aria-label="刪除好友"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </button>
                 </motion.li>
               );
@@ -190,6 +239,23 @@ export function TeleChatApp({ onBack }: { onBack: () => void }) {
           </ul>
         )}
       </div>
+
+      {/* 刪除好友確認彈窗 */}
+      <AnimatePresence>
+        {deleteTarget && (
+          <DeleteFriendConfirm
+            npcName={(() => {
+              const npc = allNpcs.find((n) => n.id === deleteTarget);
+              return npc?.displayName ?? "好友";
+            })()}
+            onConfirm={() => {
+              removeFriend(deleteTarget);
+              setDeleteTarget(null);
+            }}
+            onCancel={() => setDeleteTarget(null)}
+          />
+        )}
+      </AnimatePresence>
 
       {/* 底部提示 */}
       {friends.length > 0 && (
@@ -351,5 +417,58 @@ function AddFriendScreen({
         </div>
       </div>
     </div>
+  );
+}
+
+// 刪除好友確認彈窗
+function DeleteFriendConfirm({
+  npcName,
+  onConfirm,
+  onCancel,
+}: {
+  npcName: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onClick={onCancel}
+      className="absolute inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-6"
+    >
+      <motion.div
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.9, opacity: 0 }}
+        onClick={(e) => e.stopPropagation()}
+        className="rounded-2xl border p-5 max-w-xs w-full"
+        style={{ background: "var(--im-input-bg)", borderColor: "var(--im-header-border)" }}
+      >
+        <div className="flex items-center gap-2 mb-2">
+          <Trash2 className="w-5 h-5 text-red-500" />
+          <h3 className="text-base font-bold" style={{ color: "var(--im-header-text)" }}>刪除好友？</h3>
+        </div>
+        <p className="text-xs leading-relaxed mb-4" style={{ color: "var(--im-bubble-system-text)" }}>
+          確定要刪除 {npcName} 嗎？所有對話記錄將被清除，且無法恢復。
+        </p>
+        <div className="flex gap-2">
+          <button
+            onClick={onCancel}
+            className="flex-1 py-2 rounded-lg text-xs font-medium active:scale-95 transition"
+            style={{ background: "var(--im-bubble-npc-bg)", color: "var(--im-bubble-npc-text)" }}
+          >
+            取消
+          </button>
+          <button
+            onClick={onConfirm}
+            className="flex-1 py-2 rounded-lg bg-red-500 text-white text-xs font-semibold hover:bg-red-600 active:scale-95 transition"
+          >
+            確認刪除
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
   );
 }

@@ -241,3 +241,10 @@
   min-height: 100vh;
   min-height: 100dvh;
 }
+
+/* Debug 模式：全域文字選取（由 Debug 浮窗按鈕切換） */
+body.debug-select-all * {
+  -webkit-user-select: text !important;
+  user-select: text !important;
+  -webkit-touch-callout: default !important;
+}

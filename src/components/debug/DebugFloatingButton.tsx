@@ -17,6 +17,7 @@ import {
   Gift,
   Plus,
   Minus,
+  Type,
 } from "lucide-react";
 import { useGameStore } from "@/lib/game/store";
 import { getAllNpcs } from "@/lib/game/npcs";
@@ -411,6 +412,26 @@ export function DebugFloatingButton() {
                     <Zap className="w-3 h-3" /> 加全部好友
                   </button>
                 </div>
+
+                {/* 除錯工具區 */}
+                <p className="text-[10px] font-semibold text-white/40 uppercase tracking-wide px-1 pt-2">除錯工具</p>
+
+                <button
+                  onClick={() => {
+                    const body = document.body;
+                    if (body.classList.contains("debug-select-all")) {
+                      body.classList.remove("debug-select-all");
+                      flashToast("文字選取已關閉");
+                    } else {
+                      body.classList.add("debug-select-all");
+                      flashToast("文字選取已開啟（可選取所有文字）");
+                    }
+                  }}
+                  className="w-full py-2.5 rounded-lg text-[11px] font-semibold active:scale-95 transition flex items-center justify-center gap-1.5"
+                  style={{ background: "rgba(0,122,255,0.15)", color: "#0a84ff", border: "1px solid rgba(0,122,255,0.3)" }}
+                >
+                  <Type className="w-3.5 h-3.5" /> 切換全域文字選取
+                </button>
 
                 {/* 風險操作區 */}
                 <p className="text-[10px] font-semibold text-white/40 uppercase tracking-wide px-1 pt-2">風險操作</p>

@@ -107,6 +107,7 @@ export interface GameState {
   setConversationStatus: (npcId: string, status: ConversationState["status"], payout?: number, reason?: string) => void;
   updateConversationMetrics: (npcId: string, isUrgent: boolean, isMoney: boolean) => void;
   resetConversation: (npcId: string) => void;
+  removeFriend: (npcId: string) => void; // 刪除好友 + 對話記錄
   refreshRivals: () => void;
   resetGame: () => void;
   // 程序化 NPC 操作
@@ -119,6 +120,7 @@ export interface GameState {
   replySms: (id: string, text: string) => void; // 玩家回覆簡訊
   // 購買新電話號碼（重置風控值 + 新身份）
   buyPhoneNumber: () => { ok: boolean; error?: string; newAlias?: string };
+  buyPhoneNumberByAd: () => { ok: boolean; newAlias?: string }; // 看廣告免費購買
 }
 
 const INITIAL_DARK_COIN = 200;
@@ -242,7 +244,7 @@ export const useGameStore = create<GameState>()(
               id: genId(),
               sender: "黑網服務",
               subject: "【黑網】偵測到您的號碼被標記",
-              body: "您的號碼已被反詐騙專線監控。黑網提供免洗號碼服務，150 DRC 即可獲得全新身份 + 風控歸零。前往黑網 App 查看。",
+              body: "您的號碼已被反詐騙專線監控。黑網提供免洗號碼服務，350 DRC 或觀看廣告即可獲得全新身份 + 風控歸零。前往黑網 App 查看。",
               ts: Date.now(),
               read: false,
               type: "promo",
@@ -436,6 +438,17 @@ export const useGameStore = create<GameState>()(
           };
         }),
 
+      removeFriend: (npcId) =>
+        set((s) => {
+          const newFriendNpcIds = s.friendNpcIds.filter((id) => id !== npcId);
+          const newConversations = { ...s.conversations };
+          delete newConversations[npcId];
+          return {
+            friendNpcIds: newFriendNpcIds,
+            conversations: newConversations,
+          };
+        }),
+
       refreshRivals: () => {
         // 給虛擬對手的分數加上隨機波動，模擬即時榜單
         set((s) => {
@@ -562,10 +575,10 @@ export const useGameStore = create<GameState>()(
         }),
 
       // === 購買新電話號碼（黑網服務）===
-      // 花費 150 DRC，重置風控值為 0，獲得新身份（新代號 + 頭像 + TeleChat ID）
+      // 花費 350 DRC，重置風控值為 0，獲得新身份（新代號 + 頭像 + TeleChat ID）
       buyPhoneNumber: () => {
         const s = get();
-        const PHONE_PRICE = 150;
+        const PHONE_PRICE = 350;
         if (s.darkCoin < PHONE_PRICE) {
           return { ok: false, error: `DRC 不足，需要 ${PHONE_PRICE} DRC` };
         }
@@ -588,6 +601,37 @@ export const useGameStore = create<GameState>()(
 
         set({
           darkCoin: s.darkCoin - PHONE_PRICE,
+          riskLevel: 0,
+          alias: newAlias,
+          playerAvatar: newAvatar,
+          playerTelechatId: newTelechatId,
+          playerId: genId(),
+          smsMessages: [confirmSms, ...s.smsMessages].slice(0, 50),
+          unreadSmsCount: s.unreadSmsCount + 1,
+        });
+
+        return { ok: true, newAlias };
+      },
+
+      // 看廣告免費購買新號碼（不扣 DRC）
+      buyPhoneNumberByAd: () => {
+        const s = get();
+        const newAlias = randomAlias();
+        const newAvatar = randomEmoji();
+        const newTelechatId = randomTelechatId();
+
+        const confirmSms: SmsMessage = {
+          id: genId(),
+          sender: "黑網服務",
+          subject: "【黑網】新號碼已啟用（廣告兌換）",
+          body: `廣告兌換成功！您的新號碼已啟用。代號：${newAlias}。風控記錄已清除。`,
+          ts: Date.now(),
+          read: false,
+          type: "system",
+          replies: [],
+        };
+
+        set({
           riskLevel: 0,
           alias: newAlias,
           playerAvatar: newAvatar,

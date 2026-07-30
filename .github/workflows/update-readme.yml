@@ -1,0 +1,78 @@
+name: Update README Version & Download Link
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-readme:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get latest release info
+        id: release
+        run: |
+          # 透過 GitHub API 取得最新 release 資訊
+          LATEST=$(curl -s -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/latest")
+
+          TAG=$(echo "$LATEST" | python3 -c "import sys,json; print(json.load(sys.stdin)['tag_name'])")
+          APK_URL=$(echo "$LATEST" | python3 -c "
+          import sys, json
+          r = json.load(sys.stdin)
+          for a in r.get('assets', []):
+              if a['name'].endswith('.apk'):
+                  print(a['browser_download_url'])
+                  break
+          ")
+
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "apk_url=$APK_URL" >> $GITHUB_OUTPUT
+          echo "Latest tag: $TAG"
+          echo "APK URL: $APK_URL"
+
+      - name: Update README with latest version
+        run: |
+          TAG="${{ steps.release.outputs.tag }}"
+          APK_URL="${{ steps.release.outputs.apk_url }}"
+
+          if [ -z "$TAG" ] || [ -z "$APK_URL" ]; then
+            echo "No release info found, skipping"
+            exit 0
+          fi
+
+          # 更新 README 中的版本號與下載連結
+          # 1. 更新「最新版本」標題
+          sed -i "s|\*\*最新版本：v[0-9.]*\*\*|**最新版本：$TAG**|g" README.md
+
+          # 2. 更新下載按鈕的 URL 和標籤
+          sed -i "s|badge/Download-SimOS_v[0-9.]*\.apk|badge/Download-SimOS_${TAG}.apk|g" README.md
+          sed -i "s|releases/download/v[0-9.]*/SimOS_v[0-9.]*\.apk|releases/download/${TAG}/SimOS_${TAG}.apk|g" README.md
+
+          # 3. 更新「安裝方式」中的 APK 檔名
+          sed -i "s|SimOS_v[0-9.]*\.apk|SimOS_${TAG}.apk|g" README.md
+
+          echo "README updated for $TAG"
+          grep -n "v1\." README.md | head -5
+
+      - name: Commit and push changes
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          if git diff --quiet README.md; then
+            echo "No changes to README"
+          else
+            git add README.md
+            git commit -m "docs: auto-update README to ${{ steps.release.outputs.tag }}"
+            git push
+            echo "README updated and pushed"
+          fi

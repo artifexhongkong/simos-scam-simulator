@@ -43,9 +43,6 @@ jobs:
           $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-34" "build-tools;34.0.0" "platform-tools" > /dev/null 2>&1 || true
           echo "SDK setup complete"
 
-      - name: Install Python dependencies (for handle generation)
-        run: pip install Pillow
-
       - name: Install JS dependencies
         run: bun install --frozen-lockfile || bun install
 
@@ -122,19 +119,11 @@ jobs:
                       controller.hide(WindowInsetsCompat.Type.systemBars());
                   }
 
-                  // 延遲禁用 WebView 長按（防止長按彈出系統選單，但不影響輸入框選取手柄）
-                  // Capacitor 的 WebView 在 super.onCreate() 後才建立，需 postDelayed
+                  // 延遲禁用 WebView 長按（防止長按訊息彈出選取手柄）
+                  // 注意：輸入框內部的選取手柄無法透過此方式禁用，
+                  // 因為 WebView (Chromium) 渲染自己的手柄，無法自訂。
+                  // 這裡只禁用非輸入元素的長按。
                   new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                      if (this.bridge != null && this.bridge.getWebView() != null) {
-                          WebView webView = this.bridge.getWebView();
-                          webView.setOnLongClickListener(new View.OnLongClickListener() {
-                              @Override
-                              public boolean onLongClick(View v) {
-                                  return true; // 消費長按事件，不彈出系統選單
-                              }
-                          });
-                      }
-                      // 遞迴遍歷 View 樹找出所有 WebView
                       View root = getWindow().getDecorView();
                       disableLongClickRecursive(root);
                   }, 500);
@@ -146,7 +135,7 @@ jobs:
                       view.setOnLongClickListener(new View.OnLongClickListener() {
                           @Override
                           public boolean onLongClick(View v) {
-                              return true;
+                              return true; // 消費長按事件
                           }
                       });
                   }
@@ -161,7 +150,6 @@ jobs:
               @Override
               public void onWindowFocusChanged(boolean hasFocus) {
                   super.onWindowFocusChanged(hasFocus);
-                  // 重新取得焦點時再次隱藏系統列
                   if (hasFocus) {
                       WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
                       if (controller != null) {
@@ -179,15 +167,10 @@ jobs:
             fi
           fi
 
-          # === 自訂文字選取手柄 drawables（PNG，修正系統預設手柄黑色邊框問題） ===
-          # 系統預設的 textSelectHandle 在 WebView 中渲染時會有黑色邊框/陰影
-          # 用 PNG 取代：正確的 alpha 通道，無黑色鏤空問題
-          # 使用 Python + Pillow 生成多密度 PNG（mdpi/hdpi/xhdpi/xxhdpi）
-          RES_DIR=android/app/src/main/res
-          mkdir -p "$RES_DIR"
-          python3 scripts/generate_handles.py "$RES_DIR"
-
-          # 加入全螢幕樣式（含自訂 textSelectHandle，覆寫系統預設）
+          # 加入全螢幕樣式
+          # 注意：android:textSelectHandle 等 drawable 覆寫對 WebView 無效
+          # （WebView 用 Chromium 自己的手柄，不走 Android theme），
+          # 因此不再嘗試覆寫這些屬性。
           STYLES=android/app/src/main/res/values/styles.xml
           if [ -f "$STYLES" ]; then
             cat > "$STYLES" <<'XML'
@@ -199,14 +182,6 @@ jobs:
                   <item name="android:navigationBarColor">@android:color/black</item>
                   <item name="android:windowFullscreen">true</item>
                   <item name="android:windowContentOverlay">@null</item>
-                  <!-- 自訂文字選取手柄（取代系統預設綠色水滴，修正黑色鏤空顯示問題） -->
-                  <item name="android:textSelectHandle">@drawable/text_select_handle_middle</item>
-                  <item name="android:textSelectHandleLeft">@drawable/text_select_handle_left</item>
-                  <item name="android:textSelectHandleRight">@drawable/text_select_handle_right</item>
-                  <!-- 文字反白選取顏色（iOS 藍半透明） -->
-                  <item name="android:textColorHighlight">#33007AFF</item>
-                  <item name="android:colorAccent">#007AFF</item>
-                  <item name="colorAccent">#007AFF</item>
               </style>
               <style name="AppTheme.NoActionBarLaunch" parent="AppTheme">
                   <item name="android:background">@android:color/black</item>

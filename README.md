@@ -154,7 +154,8 @@ APK 打包透過 GitHub Actions 自動執行：
 
 | 版本 | 主要更新 |
 |------|----------|
-| v1.49 | 修正文字選取手柄（text selection handle）黑色邊框問題：改用 PNG drawable 取代 vector drawable，正確 alpha 通道無黑邊 |
+| v1.50 | 選取手柄修正：移除所有無效的 drawable 覆寫（WebView 用 Chromium 自己的手柄，無法自訂），保留長按禁用 + CSS 優化 |
+| v1.49 | 嘗試用 PNG drawable 取代 vector drawable（對 WebView 無效） |
 | v1.47 | README 加入 APK 下載連結、版本自動同步機制 |
 | v1.46 | 修正選取手柄顯示問題（CSS+JS 方案）、重新開始按鈕加入廣告機制（首次免費，之後看廣告） |
 | v1.45 | 程序化 NPC 產生器（下拉刷新產生全新目標）、Dock 圖示透明度修正 |

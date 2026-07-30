@@ -195,6 +195,9 @@
     user-select: text;
     /* iOS 藍色游標與選取色 */
     caret-color: #007aff;
+    /* 嘗試影響 WebView 選取手柄渲染（不一定所有裝置有效） */
+    -webkit-tap-highlight-color: transparent;
+    -webkit-user-modify: read-write-plaintext-only;
   }
   input::selection, textarea::selection {
     background: rgba(0, 122, 255, 0.2);

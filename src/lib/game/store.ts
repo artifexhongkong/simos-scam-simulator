@@ -17,6 +17,13 @@ export interface ChatMessage {
 }
 
 // 短訊通知（電信公司短信風格）
+export interface SmsReply {
+  id: string;
+  text: string;
+  ts: number;
+  fromPlayer: boolean; // true = 玩家發送, false = 系統回覆
+}
+
 export interface SmsMessage {
   id: string;
   sender: string;      // 發送者（如 "電信公司"、"1111"）
@@ -25,6 +32,7 @@ export interface SmsMessage {
   ts: number;
   read: boolean;
   type: "traffic" | "risk" | "system" | "promo";  // 短訊類型
+  replies: SmsReply[]; // 回覆記錄（聊天形式）
 }
 
 export interface ConversationState {
@@ -104,10 +112,11 @@ export interface GameState {
   // 程序化 NPC 操作
   addGeneratedNpcs: (npcs: NpcProfile[]) => void;
   // 短訊操作
-  addSms: (sms: Omit<SmsMessage, "id" | "ts" | "read">) => void;
+  addSms: (sms: Omit<SmsMessage, "id" | "ts" | "read" | "replies">) => void;
   markSmsRead: (id: string) => void;
   markAllSmsRead: () => void;
   deleteSms: (id: string) => void;
+  replySms: (id: string, text: string) => void; // 玩家回覆簡訊
 }
 
 const INITIAL_DARK_COIN = 200;
@@ -191,11 +200,51 @@ export const useGameStore = create<GameState>()(
         return true;
       },
 
-      addTraffic: (n) => set((s) => ({ dataTraffic: s.dataTraffic + n })),
+      addTraffic: (n) => set((s) => ({ dataTraffic: Math.max(0, s.dataTraffic + n) })),
 
-      adjustRisk: (delta) => set((s) => ({
-        riskLevel: Math.max(0, Math.min(100, s.riskLevel + delta)),
-      })),
+      adjustRisk: (delta) =>
+        set((s) => {
+          const newRisk = Math.max(0, Math.min(100, s.riskLevel + delta));
+          const wasBelow100 = s.riskLevel < 100;
+          const nowAt100 = newRisk >= 100;
+
+          // 風控值達到 100：觸發警方反詐行動
+          if (wasBelow100 && nowAt100) {
+            // 所有活躍對話被警方介入終止
+            const newConversations = { ...s.conversations };
+            for (const npcId of Object.keys(newConversations)) {
+              const conv = newConversations[npcId];
+              if (conv.status === "active") {
+                newConversations[npcId] = {
+                  ...conv,
+                  status: "cautious",
+                  endingReason: "【系統】風控值過高，警方反詐介入，對話被強制終止。",
+                };
+              }
+            }
+
+            // 發送警方反詐簡訊
+            const policeSms: SmsMessage = {
+              id: genId(),
+              sender: "165",
+              subject: "【反詐騙專線】您的號碼已被監控",
+              body: "您的號碼因疑似涉及詐騙活動已被反詐騙專線標記監控。所有進行中的通訊已被依法終止。如有疑問請撥打 165 反詐騙諮詢專線。",
+              ts: Date.now(),
+              read: false,
+              type: "risk",
+              replies: [],
+            };
+
+            return {
+              riskLevel: newRisk,
+              conversations: newConversations,
+              smsMessages: [policeSms, ...s.smsMessages].slice(0, 50),
+              unreadSmsCount: s.unreadSmsCount + 1,
+            };
+          }
+
+          return { riskLevel: newRisk };
+        }),
 
       convertScamToCoin: () => {
         const s = get();
@@ -406,6 +455,7 @@ export const useGameStore = create<GameState>()(
             id: genId(),
             ts: Date.now(),
             read: false,
+            replies: [],
           };
           return {
             smsMessages: [newSms, ...s.smsMessages].slice(0, 50), // 最多保留 50 則
@@ -433,6 +483,68 @@ export const useGameStore = create<GameState>()(
           const smsMessages = s.smsMessages.filter((m) => m.id !== id);
           const unreadSmsCount = smsMessages.filter((m) => !m.read).length;
           return { smsMessages, unreadSmsCount };
+        }),
+
+      replySms: (id, text) =>
+        set((s) => {
+          const trimmed = text.trim();
+          if (!trimmed) return {};
+          const playerReply: SmsReply = {
+            id: genId(),
+            text: trimmed,
+            ts: Date.now(),
+            fromPlayer: true,
+          };
+          let systemReply: SmsReply | null = null;
+          let trafficDelta = -100; // 非關鍵字回覆扣 100MB
+          let darkCoinDelta = 0;
+          const sms = s.smsMessages.find((m) => m.id === id);
+          if (!sms) return {};
+
+          const upper = trimmed.toUpperCase();
+          // 處理 YES 關鍵字（購買 2GB 補充包）
+          if (upper === "YES" || upper === "Y" || upper === "是" || upper === "好") {
+            if (s.darkCoin >= 30 && sms.type === "traffic") {
+              trafficDelta = 2000; // +2GB
+              darkCoinDelta = -30;
+              systemReply = {
+                id: genId(),
+                text: "交易成功！已為您補充 2GB 數據，扣費 30 DRC。感謝您使用電信公司服務。",
+                ts: Date.now(),
+                fromPlayer: false,
+              };
+            } else if (s.darkCoin < 30) {
+              systemReply = {
+                id: genId(),
+                text: "您的 DRC 餘額不足（需 30 DRC）。請充值後再試。",
+                ts: Date.now(),
+                fromPlayer: false,
+              };
+            } else {
+              systemReply = {
+                id: genId(),
+                text: "此服務不適用於此簡訊類型。",
+                ts: Date.now(),
+                fromPlayer: false,
+              };
+            }
+          }
+
+          const newReplies = [...(sms.replies || []), playerReply];
+          if (systemReply) newReplies.push(systemReply);
+
+          const smsMessages = s.smsMessages.map((m) =>
+            m.id === id ? { ...m, replies: newReplies } : m
+          );
+
+          const newDataTraffic = Math.max(0, s.dataTraffic + trafficDelta);
+          const newDarkCoin = Math.max(0, s.darkCoin + darkCoinDelta);
+
+          return {
+            smsMessages,
+            dataTraffic: newDataTraffic,
+            darkCoin: newDarkCoin,
+          };
         }),
 
       resetGame: () => {

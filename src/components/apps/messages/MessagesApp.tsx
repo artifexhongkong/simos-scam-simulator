@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronUp, Trash2, CheckCheck, Mail, AlertTriangle, Wifi, Gift, Smartphone } from "lucide-react";
+import { ChevronUp, Trash2, CheckCheck, Mail, AlertTriangle, Wifi, Gift, Smartphone, Send, ArrowLeft } from "lucide-react";
 import { useGameStore, type SmsMessage } from "@/lib/game/store";
 
 export function MessagesApp({ onBack }: { onBack: () => void }) {
@@ -11,10 +11,12 @@ export function MessagesApp({ onBack }: { onBack: () => void }) {
   const markSmsRead = useGameStore((s) => s.markSmsRead);
   const markAllSmsRead = useGameStore((s) => s.markAllSmsRead);
   const deleteSms = useGameStore((s) => s.deleteSms);
+  const replySms = useGameStore((s) => s.replySms);
 
-  const [activeSms, setActiveSms] = useState<SmsMessage | null>(null);
+  const [activeSmsId, setActiveSmsId] = useState<string | null>(null);
 
-  const cardBg = "var(--im-bubble-npc-bg)";
+  const activeSms = smsMessages.find((m) => m.id === activeSmsId) || null;
+
   const cardBorder = "var(--im-header-border)";
   const textMain = "var(--im-header-text)";
   const textSub = "var(--im-bubble-system-text)";
@@ -27,10 +29,27 @@ export function MessagesApp({ onBack }: { onBack: () => void }) {
   };
 
   const handleOpenSms = (sms: SmsMessage) => {
-    setActiveSms(sms);
+    setActiveSmsId(sms.id);
     if (!sms.read) markSmsRead(sms.id);
   };
 
+  // === 詳情頁（全螢幕 iOS Messages 風格）===
+  if (activeSms) {
+    return (
+      <SmsDetailView
+        sms={activeSms}
+        onBack={() => setActiveSmsId(null)}
+        onDelete={() => {
+          deleteSms(activeSms.id);
+          setActiveSmsId(null);
+        }}
+        onReply={(text) => replySms(activeSms.id, text)}
+        typeConfig={typeConfig}
+      />
+    );
+  }
+
+  // === 列表頁 ===
   return (
     <div className="h-full min-h-0 flex flex-col overflow-hidden" style={{ background: "var(--im-bg)" }}>
       {/* iOS 風格導航欄 */}
@@ -57,7 +76,7 @@ export function MessagesApp({ onBack }: { onBack: () => void }) {
       <div className="flex-1 min-h-0 overflow-y-auto scroll-safe-bottom">
         {smsMessages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center px-8">
-            <div className="w-16 h-16 rounded-3xl flex items-center justify-center mb-3 opacity-30" style={{ background: cardBg }}>
+            <div className="w-16 h-16 rounded-3xl flex items-center justify-center mb-3 opacity-30" style={{ background: "var(--im-bubble-npc-bg)" }}>
               <Mail className="w-8 h-8" style={{ color: textSub }} />
             </div>
             <p className="text-sm font-medium mb-1" style={{ color: textMain }}>沒有簡訊</p>
@@ -79,18 +98,13 @@ export function MessagesApp({ onBack }: { onBack: () => void }) {
                     className="w-full px-4 py-3 flex items-start gap-3 transition text-left active:opacity-60"
                     style={{ background: "var(--im-bg)" }}
                   >
-                    {/* 未讀圓點 */}
                     <div className="w-2 h-2 rounded-full mt-1.5 shrink-0" style={{ background: sms.read ? "transparent" : config.color }} />
-
-                    {/* 類型圖示 */}
                     <div
                       className="w-10 h-10 rounded-full flex items-center justify-center shrink-0"
                       style={{ background: `${config.color}20`, color: config.color }}
                     >
                       {config.icon}
                     </div>
-
-                    {/* 內容 */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2">
                         <span className={`text-sm truncate ${sms.read ? "font-normal" : "font-semibold"}`} style={{ color: textMain }}>
@@ -104,7 +118,7 @@ export function MessagesApp({ onBack }: { onBack: () => void }) {
                         {sms.subject}
                       </p>
                       <p className="text-[11px] truncate mt-0.5" style={{ color: textSub }}>
-                        {sms.body}
+                        {sms.replies && sms.replies.length > 0 ? sms.replies[sms.replies.length - 1].text : sms.body}
                       </p>
                     </div>
                   </button>
@@ -114,87 +128,192 @@ export function MessagesApp({ onBack }: { onBack: () => void }) {
           </ul>
         )}
       </div>
-
-      {/* 短訊詳情彈窗 */}
-      <AnimatePresence>
-        {activeSms && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={() => setActiveSms(null)}
-            className="absolute inset-0 z-40 bg-black/80 backdrop-blur-sm flex items-end md:items-center justify-center p-3"
-          >
-            <motion.div
-              initial={{ y: 50, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: 50, opacity: 0 }}
-              transition={{ type: "spring", stiffness: 300, damping: 30 }}
-              onClick={(e) => e.stopPropagation()}
-              className="w-full rounded-3xl border overflow-hidden max-h-[85%] flex flex-col"
-              style={{ background: "var(--im-header-bg)", borderColor: "var(--im-header-border)" }}
-            >
-              {/* 標題 */}
-              <div className="p-5 border-b" style={{ borderColor: "var(--im-header-border)" }}>
-                <div className="flex items-center gap-3 mb-2">
-                  <div
-                    className="w-12 h-12 rounded-2xl flex items-center justify-center"
-                    style={{ background: `${typeConfig[activeSms.type].color}20`, color: typeConfig[activeSms.type].color }}
-                  >
-                    {typeConfig[activeSms.type].icon}
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="text-base font-bold" style={{ color: textMain }}>{activeSms.sender}</h3>
-                    <p className="text-xs" style={{ color: textSub }}>
-                      {new Date(activeSms.ts).toLocaleString("zh-TW")}
-                    </p>
-                  </div>
-                </div>
-                <h4 className="text-sm font-semibold" style={{ color: textMain }}>{activeSms.subject}</h4>
-              </div>
-
-              {/* 內容 */}
-              <div className="p-5 overflow-y-auto">
-                <div
-                  className="rounded-2xl p-4"
-                  style={{ background: "var(--im-bubble-npc-bg)" }}
-                >
-                  <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: textMain }}>
-                    {activeSms.body}
-                  </p>
-                </div>
-
-                {/* 提示 */}
-                <p className="text-[10px] mt-3 text-center" style={{ color: textSub }}>
-                  此為系統模擬簡訊，無法回覆
-                </p>
-              </div>
-
-              {/* 底部按鈕 */}
-              <div className="p-4 border-t flex gap-2" style={{ borderColor: "var(--im-header-border)" }}>
-                <button
-                  onClick={() => {
-                    deleteSms(activeSms.id);
-                    setActiveSms(null);
-                  }}
-                  className="flex-1 py-3 rounded-xl text-sm font-medium active:scale-95 transition flex items-center justify-center gap-1.5"
-                  style={{ background: "var(--im-bubble-npc-bg)", color: "#ff3b30" }}
-                >
-                  <Trash2 className="w-4 h-4" /> 刪除
-                </button>
-                <button
-                  onClick={() => setActiveSms(null)}
-                  className="flex-1 py-3 rounded-xl text-sm font-semibold active:scale-95 transition"
-                  style={{ background: "var(--im-link-text)", color: "#fff" }}
-                >
-                  關閉
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
+  );
+}
+
+// === 簡訊詳情頁（全螢幕 iOS Messages 風格）===
+function SmsDetailView({
+  sms,
+  onBack,
+  onDelete,
+  onReply,
+  typeConfig,
+}: {
+  sms: SmsMessage;
+  onBack: () => void;
+  onDelete: () => void;
+  onReply: (text: string) => void;
+  typeConfig: Record<string, { icon: React.ReactNode; color: string; label: string }>;
+}) {
+  const [input, setInput] = useState("");
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const config = typeConfig[sms.type];
+
+  const textMain = "var(--im-header-text)";
+  const textSub = "var(--im-bubble-system-text)";
+
+  // 自動捲動到底部
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [sms.replies?.length]);
+
+  const handleSend = () => {
+    const trimmed = input.trim();
+    if (!trimmed) return;
+    onReply(trimmed);
+    setInput("");
+    // 重置 textarea 高度
+    if (inputRef.current) {
+      inputRef.current.style.height = "auto";
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
+  // 構建訊息列表：原始簡訊 + 所有回覆
+  const allMessages: { id: string; text: string; fromPlayer: boolean; ts: number }[] = [
+    { id: "original", text: sms.body, fromPlayer: false, ts: sms.ts },
+    ...(sms.replies || []).map((r) => ({ id: r.id, text: r.text, fromPlayer: r.fromPlayer, ts: r.ts })),
+  ];
+
+  return (
+    <div className="h-full min-h-0 flex flex-col overflow-hidden" style={{ background: "var(--im-bg)" }}>
+      {/* iOS 風格導航欄 */}
+      <div className="flex items-center px-2 py-2 border-b backdrop-blur-xl shrink-0 z-20" style={{ background: "var(--im-header-bg)", borderColor: "var(--im-header-border)" }}>
+        <button onClick={onBack} className="flex items-center gap-1 text-[17px] font-normal px-1 active:opacity-50 transition" style={{ color: "var(--im-link-text)" }}>
+          <ArrowLeft className="w-5 h-5" /><span>返回</span>
+        </button>
+        <div className="flex-1 flex flex-col items-center justify-center">
+          <div className="flex items-center gap-1.5">
+            <div
+              className="w-7 h-7 rounded-full flex items-center justify-center"
+              style={{ background: `${config.color}20`, color: config.color }}
+            >
+              {config.icon}
+            </div>
+            <span className="text-[16px] font-semibold truncate max-w-[140px]" style={{ color: textMain }}>
+              {sms.sender}
+            </span>
+          </div>
+        </div>
+        <div className="w-[60px] flex justify-end">
+          <button
+            onClick={onDelete}
+            className="p-1.5 active:opacity-50 transition"
+            style={{ color: "var(--im-link-text)" }}
+            title="刪除"
+          >
+            <Trash2 className="w-5 h-5" />
+          </button>
+        </div>
+      </div>
+
+      {/* 訊息列表（聊天氣泡） */}
+      <div
+        ref={scrollRef}
+        className="flex-1 min-h-0 overflow-y-auto px-3 py-4 space-y-1.5"
+      >
+        {/* 日期分隔 */}
+        <div className="flex items-center justify-center mb-2">
+          <span className="text-[10px] font-medium px-2.5 py-1 rounded-full" style={{ background: "var(--im-bubble-system-bg)", color: textSub }}>
+            {new Date(sms.ts).toLocaleString("zh-TW", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+          </span>
+        </div>
+
+        {allMessages.map((msg, i) => (
+          <MessageBubble key={msg.id} text={msg.text} fromPlayer={msg.fromPlayer} ts={msg.ts} showTime={i === 0 || i === allMessages.length - 1} />
+        ))}
+      </div>
+
+      {/* 輸入框（iOS Messages 風格） */}
+      <div
+        className="px-2 py-2 border-t backdrop-blur-xl shrink-0"
+        style={{ background: "var(--im-header-bg)", borderColor: "var(--im-header-border)" }}
+      >
+        <div className="flex items-end gap-1.5">
+          <div
+            className="flex-1 flex items-end rounded-[18px] border overflow-hidden"
+            style={{
+              background: "var(--im-input-bg)",
+              borderColor: "var(--im-input-border)",
+            }}
+          >
+            <textarea
+              ref={inputRef}
+              value={input}
+              onChange={(e) => {
+                setInput(e.target.value);
+                // 自動調整高度
+                e.target.style.height = "auto";
+                e.target.style.height = Math.min(e.target.scrollHeight, 80) + "px";
+              }}
+              onKeyDown={handleKeyDown}
+              placeholder="簡訊回覆..."
+              rows={1}
+              className="flex-1 max-h-20 resize-none bg-transparent px-3 py-1.5 text-[16px] leading-[20px] focus:outline-none"
+              style={{
+                color: "var(--im-input-text)",
+                minHeight: "32px",
+              }}
+            />
+          </div>
+          {input.trim().length > 0 && (
+            <button
+              onClick={handleSend}
+              className="w-7 h-7 rounded-full flex items-center justify-center active:scale-90 transition shrink-0"
+              style={{
+                background: "var(--im-link-text)",
+                color: "#ffffff",
+              }}
+              aria-label="送出"
+            >
+              <ArrowUpIcon />
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// 訊息氣泡
+function MessageBubble({ text, fromPlayer, ts, showTime }: { text: string; fromPlayer: boolean; ts: number; showTime: boolean }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className={`flex ${fromPlayer ? "justify-end" : "justify-start"}`}
+    >
+      <div
+        className={`max-w-[75%] rounded-[18px] px-3.5 py-2 text-[15px] leading-[20px]`}
+        style={{
+          background: fromPlayer ? "var(--im-bubble-player-bg)" : "var(--im-bubble-npc-bg)",
+          color: fromPlayer ? "var(--im-bubble-player-text)" : "var(--im-bubble-npc-text)",
+          borderBottomRightRadius: fromPlayer ? 6 : 18,
+          borderBottomLeftRadius: fromPlayer ? 18 : 6,
+        }}
+      >
+        <p className="whitespace-pre-wrap break-words">{text}</p>
+      </div>
+    </motion.div>
+  );
+}
+
+// iOS 風格向上箭頭
+function ArrowUpIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+      <path d="M8 3.5L3 8.5L4.05 9.55L7.2 6.4V13H8.8V6.4L11.95 9.55L13 8.5L8 3.5Z" />
+    </svg>
   );
 }
 

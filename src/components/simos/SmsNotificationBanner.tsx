@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useGameStore } from "@/lib/game/store";
 
@@ -8,27 +8,28 @@ import { useGameStore } from "@/lib/game/store";
  * SMS 通知橫幅
  *
  * 當有新的未讀短訊時，在畫面最上方顯示一條類似手機短信通知的橫幅。
- * 自動消失，點擊可關閉。
+ * 自動消失，點擊可直接進入簡訊內容頁面。
  */
-export function SmsNotificationBanner() {
+export function SmsNotificationBanner({ onOpenMessages }: { onOpenMessages: () => void }) {
   const smsMessages = useGameStore((s) => s.smsMessages);
   const unreadSmsCount = useGameStore((s) => s.unreadSmsCount);
+  const markSmsRead = useGameStore((s) => s.markSmsRead);
   const [visible, setVisible] = useState(false);
   const [currentSms, setCurrentSms] = useState(smsMessages[0]);
+  const prevSmsId = useRef<string | undefined>(undefined);
 
-  // 當有新簡訊時顯示橫幅
   useEffect(() => {
     if (unreadSmsCount > 0 && smsMessages.length > 0) {
       const latest = smsMessages[0];
-      // 只在「新」簡訊時顯示（避免每次渲染都彈出）
-      if (currentSms?.id !== latest.id) {
+      if (prevSmsId.current !== latest.id) {
+        prevSmsId.current = latest.id;
         setCurrentSms(latest);
         setVisible(true);
         const timer = setTimeout(() => setVisible(false), 5000);
         return () => clearTimeout(timer);
       }
     }
-  }, [smsMessages, unreadSmsCount, currentSms]);
+  }, [smsMessages, unreadSmsCount]);
 
   if (!currentSms || !visible) return null;
 
@@ -46,6 +47,12 @@ export function SmsNotificationBanner() {
     promo: "🎁",
   };
 
+  const handleTap = () => {
+    markSmsRead(currentSms.id);
+    setVisible(false);
+    onOpenMessages();
+  };
+
   return (
     <AnimatePresence>
       {visible && (
@@ -60,8 +67,9 @@ export function SmsNotificationBanner() {
             left: 8,
             right: 8,
             zIndex: 10001,
+            cursor: "pointer",
           }}
-          onClick={() => setVisible(false)}
+          onClick={handleTap}
         >
           <div
             className="rounded-2xl p-3 backdrop-blur-2xl shadow-lg"
@@ -72,7 +80,6 @@ export function SmsNotificationBanner() {
             }}
           >
             <div className="flex items-start gap-2.5">
-              {/* 圖示 */}
               <div
                 className="w-9 h-9 rounded-xl flex items-center justify-center text-lg shrink-0"
                 style={{ background: `${typeColors[currentSms.type]}30` }}
@@ -80,7 +87,6 @@ export function SmsNotificationBanner() {
                 {typeIcons[currentSms.type]}
               </div>
 
-              {/* 內容 */}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between gap-2 mb-0.5">
                   <span className="text-[12px] font-semibold text-white/90 truncate">
@@ -98,7 +104,6 @@ export function SmsNotificationBanner() {
                 </p>
               </div>
 
-              {/* 未讀數 */}
               {unreadSmsCount > 1 && (
                 <span
                   className="shrink-0 min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center"
@@ -114,3 +119,4 @@ export function SmsNotificationBanner() {
     </AnimatePresence>
   );
 }
+

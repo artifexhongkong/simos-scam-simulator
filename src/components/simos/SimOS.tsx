@@ -67,7 +67,7 @@ export function SimOS() {
         {activeApp === "messages" && <MessagesApp onBack={() => setActiveApp("home")} />}
 
         {/* SMS 通知橫幅（最頂層，類似手機短信通知） */}
-        <SmsNotificationBanner />
+        <SmsNotificationBanner onOpenMessages={() => setActiveApp("messages")} />
 
         {/* Debug 浮窗按鈕（懸浮在所有頁面之上） */}
         <DebugFloatingButton />

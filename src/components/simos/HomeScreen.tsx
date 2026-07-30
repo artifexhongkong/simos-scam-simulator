@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { MessageCircle, Skull, Trophy, Settings as SettingsIcon, Coins, Wifi, ShieldAlert, Phone, Compass, Mail } from "lucide-react";
+import { MessageCircle, Skull, Trophy, Settings as SettingsIcon, Coins, Wifi, ShieldAlert, Phone, Globe, Mail } from "lucide-react";
 import type { AppName } from "./SimOS";
 import { useGameStore } from "@/lib/game/store";
 
@@ -70,7 +70,7 @@ export function HomeScreen({ onOpenApp }: { onOpenApp: (app: AppName) => void })
     },
   ];
 
-  // Dock 欄 App（跨分頁常用，佔位，之後加功能）
+  // Dock 欄 App
   // 還原之前的透明度：Dock 圖示只保留 outline（不填色），讓底色漸層透過圖示內部顯示
   const dockApps: DockTile[] = [
     {
@@ -86,10 +86,10 @@ export function HomeScreen({ onOpenApp }: { onOpenApp: (app: AppName) => void })
       bg: "linear-gradient(135deg, #5ac8fa 0%, #007aff 100%)",
     },
     {
-      key: "browser",
-      label: "瀏覽器",
-      icon: <Compass className="w-6 h-6 text-white" strokeWidth={2} />,
-      bg: "linear-gradient(135deg, #007aff 0%, #0040dd 100%)",
+      key: "darknet",
+      label: "黑網",
+      icon: <Globe className="w-6 h-6 text-white" strokeWidth={2} />,
+      bg: "linear-gradient(135deg, #1c1c1e 0%, #000000 100%)",
     },
   ];
 
@@ -246,6 +246,8 @@ export function HomeScreen({ onOpenApp }: { onOpenApp: (app: AppName) => void })
               onClick={() => {
                 if (app.key === "messages") {
                   onOpenApp("messages" as AppName);
+                } else if (app.key === "darknet") {
+                  onOpenApp("darknet" as AppName);
                 } else {
                   alert(`${app.label} App 即將推出，敬請期待！`);
                 }
@@ -266,6 +268,12 @@ export function HomeScreen({ onOpenApp }: { onOpenApp: (app: AppName) => void })
                 >
                   {unreadSmsCount > 9 ? "9+" : unreadSmsCount}
                 </span>
+              )}
+              {app.key === "darknet" && riskLevel >= 80 && (
+                <span
+                  className="absolute -top-1 -right-1 w-3 h-3 rounded-full border-2 animate-pulse"
+                  style={{ background: "#ff3b30", borderColor: theme === "dark" ? "#000" : "#f2f2f7" }}
+                />
               )}
             </button>
           ))}

@@ -8,12 +8,13 @@ import { InfoBrokerApp } from "@/components/apps/broker/InfoBrokerApp";
 import { LeaderboardApp } from "@/components/apps/leaderboard/LeaderboardApp";
 import { SettingsApp } from "@/components/apps/settings/SettingsApp";
 import { MessagesApp } from "@/components/apps/messages/MessagesApp";
+import { DarkNetApp } from "@/components/apps/darknet/DarkNetApp";
 import { SmsNotificationBanner } from "@/components/simos/SmsNotificationBanner";
 import { DebugFloatingButton } from "@/components/debug/DebugFloatingButton";
 import { useGameStore } from "@/lib/game/store";
 import { useEffect, useState } from "react";
 
-export type AppName = "home" | "telechat" | "broker" | "leaderboard" | "settings" | "messages";
+export type AppName = "home" | "telechat" | "broker" | "leaderboard" | "settings" | "messages" | "darknet";
 
 export function SimOS() {
   const [activeApp, setActiveApp] = useState<AppName>("home");
@@ -65,6 +66,7 @@ export function SimOS() {
         {activeApp === "leaderboard" && <LeaderboardApp onBack={() => setActiveApp("home")} />}
         {activeApp === "settings" && <SettingsApp onBack={() => setActiveApp("home")} />}
         {activeApp === "messages" && <MessagesApp onBack={() => setActiveApp("home")} />}
+        {activeApp === "darknet" && <DarkNetApp onBack={() => setActiveApp("home")} />}
 
         {/* SMS 通知橫幅（最頂層，類似手機短信通知） */}
         <SmsNotificationBanner onOpenMessages={() => setActiveApp("messages")} />

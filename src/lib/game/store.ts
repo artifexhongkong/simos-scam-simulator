@@ -10,9 +10,10 @@ export interface ChatMessage {
   content: string;
   ts: number;
   meta?: {
-    decision?: "continue" | "agree" | "block";
+    decision?: "continue" | "agree" | "block" | "cautious";
     amount?: number;
     defense?: number;
+    imageType?: string;
   };
 }
 

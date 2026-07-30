@@ -9,6 +9,7 @@ export interface AgnesDecision {
   decision: "continue" | "agree" | "block" | "cautious";
   defenseDelta: number;
   payoutAmount?: number;
+  endingReason?: string;
 }
 
 export interface AgnesMessage {

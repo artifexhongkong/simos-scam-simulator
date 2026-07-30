@@ -146,19 +146,18 @@ export function TeleChatApp({ onBack }: { onBack: () => void }) {
               const isSucceeded = conv?.status === "succeeded";
               const isBlocked = conv?.status === "blocked";
               const isCautious = conv?.status === "cautious";
-              const showDelete = longPressActive === npc.id || deleteTarget === npc.id;
+              const showDelete = longPressActive === npc.id;
               return (
                 <motion.li
                   key={npc.id}
                   initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0, height: showDelete ? 0 : "auto" }}
-                  style={{ borderBottom: "1px solid var(--im-header-border)", overflow: "hidden" }}
+                  animate={{ opacity: 1, x: 0 }}
+                  style={{ borderBottom: "1px solid var(--im-header-border)" }}
                 >
-                  <button
+                  <div
                     onClick={() => {
                       if (showDelete) {
                         setLongPressActive(null);
-                        setDeleteTarget(null);
                       } else {
                         openChat(npc.id);
                       }
@@ -166,11 +165,12 @@ export function TeleChatApp({ onBack }: { onBack: () => void }) {
                     onTouchStart={() => handleTouchStart(npc.id)}
                     onTouchEnd={handleTouchEnd}
                     onTouchMove={handleTouchEnd}
-                    onMouseDown={() => handleTouchStart(npc.id)}
-                    onMouseUp={handleTouchEnd}
-                    onMouseLeave={handleTouchEnd}
-                    className="w-full px-4 py-3 flex items-center gap-3 transition text-left active:bg-black/5"
-                    style={{ background: "var(--im-bg)" }}
+                    className="w-full px-4 py-3 flex items-center gap-3 transition text-left active:bg-black/5 cursor-pointer"
+                    style={{
+                      background: showDelete
+                        ? "rgba(255,59,48,0.05)"
+                        : "var(--im-bg)",
+                    }}
                   >
                     <div
                       className="w-12 h-12 rounded-full flex items-center justify-center text-2xl shrink-0"
@@ -232,7 +232,7 @@ export function TeleChatApp({ onBack }: { onBack: () => void }) {
                         <Trash2 className="w-4 h-4" />
                       </button>
                     )}
-                  </button>
+                  </div>
                 </motion.li>
               );
             })}

@@ -16,6 +16,17 @@ export interface ChatMessage {
   };
 }
 
+// 短訊通知（電信公司短信風格）
+export interface SmsMessage {
+  id: string;
+  sender: string;      // 發送者（如 "電信公司"、"1111"）
+  subject: string;     // 標題
+  body: string;        // 內容
+  ts: number;
+  read: boolean;
+  type: "traffic" | "risk" | "system" | "promo";  // 短訊類型
+}
+
 export interface ConversationState {
   npcId: string;
   messages: ChatMessage[];
@@ -58,6 +69,10 @@ export interface GameState {
   // 程序化產生的 NPC（情報販子下拉刷新時產生）
   generatedNpcs: NpcProfile[];
 
+  // 短訊通知（電信公司短信）
+  smsMessages: SmsMessage[];
+  unreadSmsCount: number;
+
   // 對話歷史
   conversations: Record<string, ConversationState>;
 
@@ -88,6 +103,11 @@ export interface GameState {
   resetGame: () => void;
   // 程序化 NPC 操作
   addGeneratedNpcs: (npcs: NpcProfile[]) => void;
+  // 短訊操作
+  addSms: (sms: Omit<SmsMessage, "id" | "ts" | "read">) => void;
+  markSmsRead: (id: string) => void;
+  markAllSmsRead: () => void;
+  deleteSms: (id: string) => void;
 }
 
 const INITIAL_DARK_COIN = 200;
@@ -150,6 +170,8 @@ export const useGameStore = create<GameState>()(
       premiumNpcIds: [],
       friendNpcIds: [],
       generatedNpcs: [],
+      smsMessages: [],
+      unreadSmsCount: 0,
       conversations: {},
       rivalSnapshot: {},
       lastRivalUpdate: 0,
@@ -376,6 +398,43 @@ export const useGameStore = create<GameState>()(
           };
         }),
 
+      // === 短訊操作 ===
+      addSms: (sms) =>
+        set((s) => {
+          const newSms: SmsMessage = {
+            ...sms,
+            id: genId(),
+            ts: Date.now(),
+            read: false,
+          };
+          return {
+            smsMessages: [newSms, ...s.smsMessages].slice(0, 50), // 最多保留 50 則
+            unreadSmsCount: s.unreadSmsCount + 1,
+          };
+        }),
+
+      markSmsRead: (id) =>
+        set((s) => {
+          const smsMessages = s.smsMessages.map((m) =>
+            m.id === id ? { ...m, read: true } : m
+          );
+          const unreadSmsCount = smsMessages.filter((m) => !m.read).length;
+          return { smsMessages, unreadSmsCount };
+        }),
+
+      markAllSmsRead: () =>
+        set((s) => ({
+          smsMessages: s.smsMessages.map((m) => ({ ...m, read: true })),
+          unreadSmsCount: 0,
+        })),
+
+      deleteSms: (id) =>
+        set((s) => {
+          const smsMessages = s.smsMessages.filter((m) => m.id !== id);
+          const unreadSmsCount = smsMessages.filter((m) => !m.read).length;
+          return { smsMessages, unreadSmsCount };
+        }),
+
       resetGame: () => {
         // 先清除 localStorage（避免 persist middleware 覆蓋回來）
         if (typeof window !== "undefined") {
@@ -403,6 +462,8 @@ export const useGameStore = create<GameState>()(
           premiumNpcIds: [],
           friendNpcIds: [],
           generatedNpcs: [],
+          smsMessages: [],
+          unreadSmsCount: 0,
           conversations: {},
           rivalSnapshot: {},
           lastRivalUpdate: 0,

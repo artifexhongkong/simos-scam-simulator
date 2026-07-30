@@ -155,24 +155,30 @@ export function ChatWindow({ npc, onBack }: { npc: NpcProfile; onBack: () => voi
       const blockMsg: ChatMessage = {
         id: genId(),
         role: "system",
-        content: "⚠ 流量耗盡！此號碼已被電信商封鎖，對話強制中斷。請至情報販子補給站購買免洗 SIM 卡。",
+        content: "✗ 此號碼已被電信商封鎖，對話強制中斷。請至情報販子補給站購買免洗 SIM 卡。",
         ts: Date.now(),
       };
       appendMessage(npc.id, blockMsg);
       setConversationStatus(npc.id, "blocked", undefined, "流量耗盡，號碼被封鎖。");
+      // 發送電信公司封鎖通知短訊
+      useGameStore.getState().addSms({
+        sender: "1111",
+        subject: "【電信公司】號碼已被暫停服務",
+        body: "尊敬的客戶，您的號碼因數據用量異常已被暫停服務。如需恢復，請購買補充卡或聯繫客服。",
+        type: "traffic",
+      });
       return;
     }
 
-    // 流量低於 500MB 時發送警告通知
+    // 流量低於 500MB 時發送電信公司短訊通知（不再在聊天中顯示警告）
     const remainingTraffic = useGameStore.getState().dataTraffic;
     if (remainingTraffic <= 500 && remainingTraffic > 0) {
-      const warnMsg: ChatMessage = {
-        id: genId(),
-        role: "system",
-        content: `⚠ 流量警告：剩餘 ${(remainingTraffic / 1000).toFixed(1)} GB，號碼即將被封鎖！`,
-        ts: Date.now(),
-      };
-      appendMessage(npc.id, warnMsg);
+      useGameStore.getState().addSms({
+        sender: "1111",
+        subject: "【電信公司】數據用量提醒",
+        body: `您的數據剩餘 ${(remainingTraffic / 1000).toFixed(2)} GB，即將用罄。回覆 YES 購買 2GB 補充包（30 DRC），或至情報販子補給站購買免洗 SIM 卡。`,
+        type: "traffic",
+      });
     }
 
     setInput("");

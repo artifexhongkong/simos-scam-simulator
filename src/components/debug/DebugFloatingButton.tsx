@@ -72,6 +72,8 @@ export function DebugFloatingButton() {
   };
 
   // 拖曳邏輯
+  const dragThreshold = 8; // 移動超過 8px 才算拖曳，否則視為點擊
+
   const handleTouchStart = (e: React.TouchEvent | React.MouseEvent) => {
     const clientX = "touches" in e ? e.touches[0].clientX : e.clientX;
     const clientY = "touches" in e ? e.touches[0].clientY : e.clientY;
@@ -86,7 +88,7 @@ export function DebugFloatingButton() {
     const clientY = "touches" in e ? e.touches[0].clientY : e.clientY;
     const dx = clientX - dragStart.current.x;
     const dy = clientY - dragStart.current.y;
-    if (Math.abs(dx) > 5 || Math.abs(dy) > 5) hasMoved.current = true;
+    if (Math.abs(dx) > dragThreshold || Math.abs(dy) > dragThreshold) hasMoved.current = true;
     const newX = Math.max(0, Math.min(window.innerWidth - 56, dragStart.current.posX + dx));
     const newY = Math.max(0, Math.min(window.innerHeight - 56, dragStart.current.posY + dy));
     setPosition({ x: newX, y: newY });
@@ -94,7 +96,14 @@ export function DebugFloatingButton() {
 
   const handleTouchEnd = () => {
     setDragging(false);
-    // 如果沒有移動，視為點擊 → 展開/收起
+    // 如果沒有移動超過閾值，視為點擊 → 展開/收起
+    if (!hasMoved.current) {
+      setExpanded(!expanded);
+    }
+  };
+
+  // 點擊（非拖曳時立即觸發）
+  const handleClick = () => {
     if (!hasMoved.current) {
       setExpanded(!expanded);
     }
@@ -225,14 +234,12 @@ export function DebugFloatingButton() {
           left: position.x,
           top: position.y,
           zIndex: 9999,
+          touchAction: "none",
         }}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
-        onMouseDown={handleTouchStart}
-        onMouseMove={dragging ? handleTouchMove : undefined}
-        onMouseUp={handleTouchEnd}
-        onMouseLeave={dragging ? handleTouchEnd : undefined}
+        onClick={handleClick}
         className="w-12 h-12 rounded-full flex items-center justify-center cursor-pointer"
         whileTap={{ scale: 0.9 }}
       >
@@ -311,9 +318,9 @@ export function DebugFloatingButton() {
                   icon={<Wifi className="w-3.5 h-3.5" />}
                   label="流量卡"
                   value={`${(dataTraffic / 1000).toFixed(1)} GB`}
-                  onAdd={() => { addTraffic(2000); flashToast("+2 GB"); }}
-                  onMinus={() => { addTraffic(-2000); flashToast("-2 GB"); }}
-                  addAmount="2GB"
+                  onAdd={() => { addTraffic(100); flashToast("+100 MB"); }}
+                  onMinus={() => { addTraffic(-100); flashToast("-100 MB"); }}
+                  addAmount="100MB"
                   color="#5ac8fa"
                 />
 
@@ -340,7 +347,7 @@ export function DebugFloatingButton() {
                 {/* 快速資源按鈕 */}
                 <div className="grid grid-cols-2 gap-1.5 pt-1">
                   <button
-                    onClick={() => { addDarkCoin(1000); addTraffic(10000); flashToast("資源大補包"); }}
+                    onClick={() => { addDarkCoin(1000); addTraffic(5000); flashToast("資源大補包 (+1000 DRC +5GB)"); }}
                     className="py-2 rounded-lg text-[10px] font-medium active:scale-95 transition flex items-center justify-center gap-1"
                     style={{ background: "rgba(191,90,242,0.15)", color: "#bf5af2" }}
                   >

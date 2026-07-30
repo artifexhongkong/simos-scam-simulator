@@ -30,6 +30,7 @@ export function HomeScreen({ onOpenApp }: { onOpenApp: (app: AppName) => void })
   const dataTraffic = useGameStore((s) => s.dataTraffic);
   const riskLevel = useGameStore((s) => s.riskLevel);
   const scamScore = useGameStore((s) => s.scamScore);
+  const unreadSmsCount = useGameStore((s) => s.unreadSmsCount);
 
   // 計算未讀訊息數
   const unreadCount = Object.values(conversations).filter((c) => {
@@ -243,8 +244,11 @@ export function HomeScreen({ onOpenApp }: { onOpenApp: (app: AppName) => void })
             <button
               key={`dock-${app.key}`}
               onClick={() => {
-                // 佔位 App 提示之後加入功能
-                alert(`${app.label} App 即將推出，敬請期待！`);
+                if (app.key === "messages") {
+                  onOpenApp("messages" as AppName);
+                } else {
+                  alert(`${app.label} App 即將推出，敬請期待！`);
+                }
               }}
               className="relative active:scale-90 transition"
               aria-label={app.label}
@@ -255,6 +259,14 @@ export function HomeScreen({ onOpenApp }: { onOpenApp: (app: AppName) => void })
               >
                 {app.icon}
               </div>
+              {app.key === "messages" && unreadSmsCount > 0 && (
+                <span
+                  className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1.5 bg-red-500 text-white text-[11px] font-bold rounded-full flex items-center justify-center border-2"
+                  style={{ borderColor: theme === "dark" ? "#000" : "#f2f2f7" }}
+                >
+                  {unreadSmsCount > 9 ? "9+" : unreadSmsCount}
+                </span>
+              )}
             </button>
           ))}
         </div>

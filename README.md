@@ -6,14 +6,14 @@
 
 ## 📱 下載 APK
 
-**最新版本：v1.60**
+**最新版本：v1.61**
 
-[![Download APK](https://img.shields.io/badge/Download-SimOS_v1.60.apk-blue?style=for-the-badge&logo=android)](https://github.com/artifexhongkong/simos-scam-simulator/releases/download/v1.60/SimOS_v1.60.apk)
+[![Download APK](https://img.shields.io/badge/Download-SimOS_v1.61.apk-blue?style=for-the-badge&logo=android)](https://github.com/artifexhongkong/simos-scam-simulator/releases/download/v1.61/SimOS_v1.61.apk)
 
 > 所有版本：[Releases 頁面](https://github.com/artifexhongkong/simos-scam-simulator/releases)
 
 ### 安裝方式
-1. 點擊上方按鈕下載 `SimOS_v1.60.apk`
+1. 點擊上方按鈕下載 `SimOS_v1.61.apk`
 2. 在 Android 手機上允許「安裝未知來源應用」
 3. 開啟 APK 檔案安裝
 4. 安裝完成後開啟「SimOS」即可遊玩

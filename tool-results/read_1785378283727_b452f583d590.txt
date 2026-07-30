@@ -1,0 +1,868 @@
+     1→"use client";
+     2→
+     3→import { useEffect, useRef, useState, useCallback } from "react";
+     4→import { motion, AnimatePresence } from "framer-motion";
+     5→import {
+     6→  ArrowLeft,
+     7→  Send,
+     8→  Loader2,
+     9→  AlertTriangle,
+    10→  CheckCircle2,
+    11→  UserX,
+    12→  Trophy,
+    13→  RotateCcw,
+    14→  Download,
+    15→  Clock,
+    16→  ChevronUp,
+    17→  Image as ImageIcon,
+    18→  X,
+    19→  AlertCircle,
+    20→  ShieldAlert,
+    21→} from "lucide-react";
+    22→import { useGameStore, type ChatMessage } from "@/lib/game/store";
+    23→import type { NpcProfile } from "@/lib/game/npcs";
+    24→import { callAgnes } from "@/lib/agnes/engine";
+    25→import { QuickPhrases } from "./QuickPhrases";
+    26→import { ImageMaterials } from "./ImageMaterials";
+    27→import { EndingPanel } from "./EndingPanel";
+    28→
+    29→function genId() {
+    30→  return Math.random().toString(36).slice(2) + Date.now().toString(36);
+    31→}
+    32→
+    33→export function ChatWindow({ npc, onBack }: { npc: NpcProfile; onBack: () => void }) {
+    34→  const conv = useGameStore((s) => s.conversations[npc.id]);
+    35→  const appendMessage = useGameStore((s) => s.appendMessage);
+    36→  const updateDefense = useGameStore((s) => s.updateDefense);
+    37→  const setConversationStatus = useGameStore((s) => s.setConversationStatus);
+    38→  const updateConversationMetrics = useGameStore((s) => s.updateConversationMetrics);
+    39→  const resetConversation = useGameStore((s) => s.resetConversation);
+    40→  const consumeTraffic = useGameStore((s) => s.consumeTraffic);
+    41→  const dataTraffic = useGameStore((s) => s.dataTraffic);
+    42→  const theme = useGameStore((s) => s.theme);
+    43→  const showTimestamps = useGameStore((s) => s.showTimestamps);
+    44→
+    45→  const [input, setInput] = useState("");
+    46→  const [thinking, setThinking] = useState(false);
+    47→  const [successAnim, setSuccessAnim] = useState(false);
+    48→  const [showResetConfirm, setShowResetConfirm] = useState(false);
+    49→  const [showEnding, setShowEnding] = useState(false);
+    50→  const [showQuickPhrases, setShowQuickPhrases] = useState(false);
+    51→  const [showImageMaterials, setShowImageMaterials] = useState(false);
+    52→  const [showNpcInfo, setShowNpcInfo] = useState(false);
+    53→  const [hasReset, setHasReset] = useState(false);
+    54→  const [failedMessages, setFailedMessages] = useState<Set<string>>(new Set());
+    55→  const [aiVerified, setAiVerified] = useState(false); // 第一次成功後設為 true，之後不再驗證
+    56→  const [keyboardHeight, setKeyboardHeight] = useState(0);
+    57→  const scrollRef = useRef<HTMLDivElement>(null);
+    58→  const inputRef = useRef<HTMLTextAreaElement>(null);
+    59→  const userScrolledUpRef = useRef(false);
+    60→  const lastScrollTsRef = useRef(0);
+    61→
+    62→  const scrollToBottom = useCallback((force = false) => {
+    63→    const now = Date.now();
+    64→    if (!force && now - lastScrollTsRef.current < 100) return;
+    65→    lastScrollTsRef.current = now;
+    66→    if (!scrollRef.current) return;
+    67→    const el = scrollRef.current;
+    68→    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    69→    if (distanceFromBottom < 150) userScrolledUpRef.current = false;
+    70→    if (!force && userScrolledUpRef.current) return;
+    71→    el.scrollTop = el.scrollHeight;
+    72→  }, []);
+    73→
+    74→  useEffect(() => {
+    75→    const el = scrollRef.current;
+    76→    if (!el) return;
+    77→    const handleScroll = () => {
+    78→      const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    79→      userScrolledUpRef.current = distanceFromBottom > 150;
+    80→    };
+    81→    el.addEventListener("scroll", handleScroll, { passive: true });
+    82→    return () => el.removeEventListener("scroll", handleScroll);
+    83→  }, []);
+    84→
+    85→  useEffect(() => {
+    86→    if (typeof window === "undefined") return;
+    87→    const handleResize = () => {
+    88→      if (window.visualViewport) {
+    89→        const kbHeight = window.innerHeight - window.visualViewport.height;
+    90→        setKeyboardHeight(kbHeight > 50 ? kbHeight : 0);
+    91→      }
+    92→      setTimeout(() => scrollToBottom(false), 50);
+    93→      setTimeout(() => scrollToBottom(false), 200);
+    94→    };
+    95→    window.addEventListener("resize", handleResize);
+    96→    window.addEventListener("orientationchange", handleResize);
+    97→    if (window.visualViewport) {
+    98→      window.visualViewport.addEventListener("resize", handleResize);
+    99→      window.visualViewport.addEventListener("scroll", handleResize);
+   100→    }
+   101→    return () => {
+   102→      window.removeEventListener("resize", handleResize);
+   103→      window.removeEventListener("orientationchange", handleResize);
+   104→      if (window.visualViewport) {
+   105→        window.visualViewport.removeEventListener("resize", handleResize);
+   106→        window.visualViewport.removeEventListener("scroll", handleResize);
+   107→      }
+   108→    };
+   109→  }, [scrollToBottom]);
+   110→
+   111→  useEffect(() => {
+   112→    requestAnimationFrame(() => scrollToBottom(false));
+   113→  }, [conv?.messages.length, thinking, scrollToBottom]);
+   114→
+   115→  const handleInputFocus = () => {
+   116→    setTimeout(() => scrollToBottom(true), 100);
+   117→    setTimeout(() => scrollToBottom(true), 300);
+   118→  };
+   119→
+   120→  // 對話結束時自動彈出結果面板
+   121→  useEffect(() => {
+   122→    if (conv?.status && conv.status !== "active" && conv.endingReason) {
+   123→      // 對話剛結束 → 顯示結果面板
+   124→      const lastMsg = conv.messages[conv.messages.length - 1];
+   125→      if (lastMsg?.meta?.decision === "agree" || lastMsg?.meta?.decision === "block" || lastMsg?.meta?.decision === "cautious") {
+   126→        setTimeout(() => setShowEnding(true), 1500);
+   127→      }
+   128→    }
+   129→  }, [conv?.status, conv?.endingReason, conv?.messages]);
+   130→
+   131→  if (!conv) {
+   132→    return (
+   133→      <div className="h-full flex items-center justify-center text-[color:var(--im-bubble-system-text)] text-sm">
+   134→        載入中...
+   135→      </div>
+   136→    );
+   137→  }
+   138→
+   139→  const isLocked = conv.status !== "active";
+   140→
+   141→  const sendMessage = async (text: string, imageMaterial?: { type: string; label: string }, retryMsgId?: string) => {
+   142→    const trimmed = (text || "").trim();
+   143→    if (!trimmed && !imageMaterial) return;
+   144→    if (thinking) return;
+   145→    const latestConv = useGameStore.getState().conversations[npc.id];
+   146→    if (!latestConv || latestConv.status !== "active") return;
+   147→
+   148→    // 流量檢查：每則訊息消耗 100MB
+   149→    const TRAFFIC_PER_MSG = 100;
+   150→    if (!consumeTraffic(TRAFFIC_PER_MSG)) {
+   151→      // 流量不足，號碼被封
+   152→      const blockMsg: ChatMessage = {
+   153→        id: genId(),
+   154→        role: "system",
+   155→        content: "⚠ 流量耗盡！此號碼已被電信商封鎖，對話強制中斷。請至情報販子補給站購買免洗 SIM 卡。",
+   156→        ts: Date.now(),
+   157→      };
+   158→      appendMessage(npc.id, blockMsg);
+   159→      setConversationStatus(npc.id, "blocked", undefined, "流量耗盡，號碼被封鎖。");
+   160→      return;
+   161→    }
+   162→
+   163→    // 流量低於 500MB 時發送警告通知
+   164→    const remainingTraffic = useGameStore.getState().dataTraffic;
+   165→    if (remainingTraffic <= 500 && remainingTraffic > 0) {
+   166→      const warnMsg: ChatMessage = {
+   167→        id: genId(),
+   168→        role: "system",
+   169→        content: `⚠ 流量警告：剩餘 ${(remainingTraffic / 1000).toFixed(1)} GB，號碼即將被封鎖！`,
+   170→        ts: Date.now(),
+   171→      };
+   172→      appendMessage(npc.id, warnMsg);
+   173→    }
+   174→
+   175→    setInput("");
+   176→    setShowQuickPhrases(false);
+   177→    setShowImageMaterials(false);
+   178→    setThinking(true);
+   179→
+   180→    const finalText = imageMaterial ? `[圖片：${imageMaterial.label}] ${trimmed}` : trimmed;
+   181→    const playerMsg: ChatMessage = {
+   182→      id: genId(),
+   183→      role: "player",
+   184→      content: finalText,
+   185→      ts: Date.now(),
+   186→      meta: imageMaterial ? { imageType: imageMaterial.type } : undefined,
+   187→    };
+   188→    appendMessage(npc.id, playerMsg);
+   189→
+   190→    // 偵測訊號
+   191→    const moneyCues = ["轉帳", "匯款", "帳戶", "ATM", "OTP", "驗證碼", "轉過去", "匯過去", "繳交", "支付", "付款", "繳費", "存入"];
+   192→    const urgentCues = ["急", "快", "現在", "馬上", "立刻", "限時", "今天內"];
+   193→    const isUrgent = urgentCues.some((k) => finalText.includes(k));
+   194→    const isMoney = moneyCues.some((k) => finalText.includes(k));
+   195→
+   196→    // 更新連續計數 + 輪數
+   197→    updateConversationMetrics(npc.id, isUrgent, isMoney);
+   198→
+   199→    const currentMessages = latestConv.messages;
+   200→    const historyForAI = currentMessages
+   201→      .filter((m) => m.role === "player" || m.role === "npc")
+   202→      .map((m) => ({
+   203→        role: m.role === "player" ? ("player" as const) : ("npc" as const),
+   204→        content: m.content,
+   205→      }));
+   206→
+   207→    // 重新讀取更新後的 conv（含最新 metrics）
+   208→    const updatedConv = useGameStore.getState().conversations[npc.id];
+   209→    if (!updatedConv) return;
+   210→
+   211→    try {
+   212→      const data = await callAgnes({
+   213→        sessionId: `${npc.id}-${updatedConv.startedAt}`,
+   214→        npc,
+   215→        playerMessage: finalText,
+   216→        currentDefense: updatedConv.defense,
+   217→        history: historyForAI,
+   218→        consecutiveUrgent: updatedConv.consecutiveUrgent,
+   219→        consecutiveMoney: updatedConv.consecutiveMoney,
+   220→        turns: updatedConv.turns,
+   221→      });
+   222→
+   223→      // AI 連線成功 → 標記為已驗證，之後不再驗證
+   224→      setAiVerified(true);
+   225→
+   226→      if (data.defenseDelta) {
+   227→        updateDefense(npc.id, data.defenseDelta);
+   228→      }
+   229→
+   230→      // 不再有人工延遲 — AI 回應後立即顯示
+   231→
+   232→      const npcMsg: ChatMessage = {
+   233→        id: genId(),
+   234→        role: "npc",
+   235→        content: data.reply,
+   236→        ts: Date.now(),
+   237→        meta: { decision: data.decision },
+   238→      };
+   239→      appendMessage(npc.id, npcMsg);
+   240→
+   241→      // 處理多結局
+   242→      if (data.decision === "agree" && data.payoutAmount) {
+   243→        const sysMsg: ChatMessage = {
+   244→          id: genId(),
+   245→          role: "system",
+   246→          content: `✓ ${npc.displayName} 已同意轉帳 $${data.payoutAmount.toLocaleString()}。款項已到帳。`,
+   247→          ts: Date.now(),
+   248→          meta: { decision: "agree", amount: data.payoutAmount },
+   249→        };
+   250→        appendMessage(npc.id, sysMsg);
+   251→        setConversationStatus(npc.id, "succeeded", data.payoutAmount, data.endingReason);
+   252→        setSuccessAnim(true);
+   253→        setTimeout(() => setSuccessAnim(false), 2500);
+   254→      } else if (data.decision === "block") {
+   255→        const sysMsg: ChatMessage = {
+   256→          id: genId(),
+   257→          role: "system",
+   258→          content: `✗ ${npc.displayName} 已將你封鎖。對話終止。`,
+   259→          ts: Date.now(),
+   260→          meta: { decision: "block" },
+   261→        };
+   262→        appendMessage(npc.id, sysMsg);
+   263→        setConversationStatus(npc.id, "blocked", undefined, data.endingReason);
+   264→      } else if (data.decision === "cautious") {
+   265→        const sysMsg: ChatMessage = {
+   266→          id: genId(),
+   267→          role: "system",
+   268→          content: `⚠ ${npc.displayName} 不願再繼續討論這件事。對話結束。`,
+   269→          ts: Date.now(),
+   270→          meta: { decision: "cautious" },
+   271→        };
+   272→        appendMessage(npc.id, sysMsg);
+   273→        setConversationStatus(npc.id, "cautious", undefined, data.endingReason);
+   274→      }
+   275→    } catch (e) {
+   276→      console.error("[ChatWindow] callAgnes failed:", e);
+   277→      // 只有在尚未驗證通過時才顯示「發送失敗」
+   278→      // 已驗證通過後的臨時失敗不顯示（避免打擾玩家對話流暢度）
+   279→      if (!aiVerified) {
+   280→        setFailedMessages(prev => new Set(prev).add(playerMsg.id));
+   281→      } else {
+   282→        // 已驗證但臨時失敗 → 顯示系統提示但不阻斷
+   283→        const errMsg: ChatMessage = {
+   284→          id: genId(),
+   285→          role: "system",
+   286→          content: "⚠ 訊息發送延遲，請稍候再試。",
+   287→          ts: Date.now(),
+   288→        };
+   289→        appendMessage(npc.id, errMsg);
+   290→      }
+   291→    } finally {
+   292→      setThinking(false);
+   293→      setTimeout(() => inputRef.current?.focus(), 100);
+   294→    }
+   295→  };
+   296→
+   297→  const handleReset = () => {
+   298→    if (hasReset) return;
+   299→    resetConversation(npc.id);
+   300→    setHasReset(true);
+   301→    setAiVerified(false); // 重置後重新需要驗證
+   302→    setFailedMessages(new Set()); // 清除失敗標記
+   303→    setShowResetConfirm(false);
+   304→    setShowEnding(false);
+   305→    setThinking(false);
+   306→    setSuccessAnim(false);
+   307→    setTimeout(() => inputRef.current?.focus(), 100);
+   308→  };
+   309→
+   310→  const handleExport = () => {
+   311→    const lines: string[] = [];
+   312→    lines.push(`# SimOS 對話記錄 - ${npc.displayName}`);
+   313→    lines.push(`# 匯出時間：${new Date().toLocaleString("zh-TW")}`);
+   314→    lines.push(`# NPC: ${npc.displayName} (${npc.id})`);
+   315→    lines.push(`# TeleChat ID: ${npc.telechatId}`);
+   316→    lines.push(`# 對話狀態：${conv.status}`);
+   317→    if (conv.payout) lines.push(`# 詐騙金額：$${conv.payout.toLocaleString()}`);
+   318→    if (conv.endingReason) lines.push(`# 結局：${conv.endingReason}`);
+   319→    lines.push(`# 對話輪數：${conv.turns}`);
+   320→    lines.push("");
+   321→    lines.push("---");
+   322→    lines.push("");
+   323→    for (const msg of conv.messages) {
+   324→      const time = new Date(msg.ts).toLocaleString("zh-TW");
+   325→      let speaker: string;
+   326→      if (msg.role === "player") speaker = "🧑 玩家";
+   327→      else if (msg.role === "npc") speaker = `${npc.avatar} ${npc.displayName}`;
+   328→      else speaker = "ℹ️ 系統";
+   329→      lines.push(`[${time}] ${speaker}:`);
+   330→      lines.push(msg.content);
+   331→      lines.push("");
+   332→    }
+   333→    const blob = new Blob([lines.join("\n")], { type: "text/plain;charset=utf-8" });
+   334→    const url = URL.createObjectURL(blob);
+   335→    const a = document.createElement("a");
+   336→    a.href = url;
+   337→    a.download = `SimOS_${npc.id}_${Date.now()}.txt`;
+   338→    document.body.appendChild(a);
+   339→    a.click();
+   340→    document.body.removeChild(a);
+   341→    URL.revokeObjectURL(url);
+   342→  };
+   343→
+   344→  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+   345→    if (e.key === "Enter" && !e.shiftKey) {
+   346→      e.preventDefault();
+   347→      sendMessage(input);
+   348→    }
+   349→  };
+   350→
+   351→  const canSend = input.trim().length > 0 && !thinking && !isLocked;
+   352→
+   353→  return (
+   354→    <div
+   355→      className="h-full min-h-0 flex flex-col relative overflow-hidden"
+   356→      style={{ background: "var(--im-bg)" }}
+   357→    >
+   358→      {/* iOS iMessage 頂部導航欄 */}
+   359→      <div
+   360→        className="flex items-center px-2 py-2 border-b backdrop-blur-xl z-20 shrink-0"
+   361→        style={{
+   362→          background: "var(--im-header-bg)",
+   363→          borderColor: "var(--im-header-border)",
+   364→          color: "var(--im-header-text)",
+   365→        }}
+   366→      >
+   367→        <button
+   368→          onClick={onBack}
+   369→          className="flex items-center gap-1 text-[17px] font-normal px-1 active:opacity-50 transition"
+   370→          style={{ color: "var(--im-link-text)" }}
+   371→          aria-label="返回"
+   372→        >
+   373→          <ChevronUp className="w-5 h-5 rotate-[-90deg]" />
+   374→          <span className="max-w-[60px] truncate">返回</span>
+   375→        </button>
+   376→
+   377→        <div className="flex-1 flex flex-col items-center justify-center">
+   378→          <button
+   379→            onClick={() => setShowNpcInfo(true)}
+   380→            className="flex items-center gap-1.5 active:scale-95 transition"
+   381→          >
+   382→            <div
+   383→              className="w-7 h-7 rounded-full flex items-center justify-center text-base"
+   384→              style={{ background: "var(--im-bubble-npc-bg)" }}
+   385→            >
+   386→              {npc.avatar}
+   387→            </div>
+   388→            <div className="flex flex-col items-start">
+   389→              <span className="text-[16px] font-semibold truncate max-w-[140px]" style={{ color: "var(--im-header-text)" }}>
+   390→                {npc.displayName}
+   391→              </span>
+   392→              {failedMessages.size > 0 && (
+   393→                <span className="text-[10px] font-medium" style={{ color: "#ff3b30" }}>
+   394→                  連接網絡失敗
+   395→                </span>
+   396→              )}
+   397→            </div>
+   398→          </button>
+   399→        </div>
+   400→
+   401→        <div className="flex items-center gap-1 w-[80px] justify-end">
+   402→          <button
+   403→            onClick={handleExport}
+   404→            className="p-1.5 rounded-full active:opacity-50 transition"
+   405→            style={{ color: "var(--im-link-text)" }}
+   406→            aria-label="匯出"
+   407→            title="匯出對話"
+   408→          >
+   409→            <Download className="w-5 h-5" />
+   410→          </button>
+   411→          {!hasReset && (
+   412→            <button
+   413→              onClick={() => setShowResetConfirm(true)}
+   414→              className="p-1.5 rounded-full active:opacity-50 transition"
+   415→              style={{ color: "var(--im-link-text)" }}
+   416→              aria-label="重新開始"
+   417→              title="重新開始對話（僅限一次）"
+   418→            >
+   419→              <RotateCcw className="w-5 h-5" />
+   420→            </button>
+   421→          )}
+   422→        </div>
+   423→      </div>
+   424→
+   425→      {/* 成功動畫 */}
+   426→      <AnimatePresence>
+   427→        {successAnim && (
+   428→          <motion.div
+   429→            initial={{ opacity: 0, scale: 0.5 }}
+   430→            animate={{ opacity: 1, scale: 1 }}
+   431→            exit={{ opacity: 0, scale: 0.5 }}
+   432→            className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+   433→          >
+   434→            <div className="flex flex-col items-center gap-3">
+   435→              <motion.div
+   436→                initial={{ rotate: -180, scale: 0 }}
+   437→                animate={{ rotate: 0, scale: 1 }}
+   438→                transition={{ type: "spring", stiffness: 200 }}
+   439→                className="w-24 h-24 rounded-full bg-gradient-to-br from-amber-400 to-yellow-600 flex items-center justify-center shadow-2xl"
+   440→              >
+   441→                <Trophy className="w-12 h-12 text-white" />
+   442→              </motion.div>
+   443→              <motion.div
+   444→                initial={{ opacity: 0, y: 10 }}
+   445→                animate={{ opacity: 1, y: 0 }}
+   446→                transition={{ delay: 0.2 }}
+   447→                className="text-center"
+   448→              >
+   449→                <p className="text-white text-xl font-bold">詐騙成功！</p>
+   450→                <p className="text-amber-400 text-2xl font-bold mt-1">
+   451→                  +${conv.payout?.toLocaleString()}
+   452→                </p>
+   453→              </motion.div>
+   454→            </div>
+   455→          </motion.div>
+   456→        )}
+   457→      </AnimatePresence>
+   458→
+   459→      {/* 訊息列表 - iMessage 風格 */}
+   460→      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto px-3 py-3 space-y-0.5">
+   461→        {conv.messages.map((msg, idx) => (
+   462→          <MessageBubble
+   463→            key={msg.id}
+   464→            msg={msg}
+   465→            npcAvatar={npc.avatar}
+   466→            showTimestamp={showTimestamps}
+   467→            prevMsg={idx > 0 ? conv.messages[idx - 1] : undefined}
+   468→            onAvatarClick={() => setShowNpcInfo(true)}
+   469→            isFailed={failedMessages.has(msg.id)}
+   470→            onRetry={() => {
+   471→              // 重新發送：移除失敗標記，直接重試
+   472→              setFailedMessages(prev => {
+   473→                const next = new Set(prev);
+   474→                next.delete(msg.id);
+   475→                return next;
+   476→              });
+   477→              sendMessage(msg.content, undefined, msg.id);
+   478→            }}
+   479→          />
+   480→        ))}
+   481→        {thinking && (
+   482→          <div className="flex items-end gap-1.5 px-2 my-1">
+   483→            <div className="w-7 h-7 rounded-full flex items-center justify-center text-base shrink-0" style={{ background: "var(--im-bubble-npc-bg)" }}>
+   484→              {npc.avatar}
+   485→            </div>
+   486→            <div className="px-3 py-2.5" style={{ background: "var(--im-bubble-npc-bg)", borderRadius: "18px 18px 18px 4px" }}>
+   487→              <div className="flex gap-1">
+   488→                {[0, 1, 2].map((i) => (
+   489→                  <motion.div
+   490→                    key={i}
+   491→                    animate={{ opacity: [0.3, 1, 0.3] }}
+   492→                    transition={{ duration: 1, repeat: Infinity, delay: i * 0.15 }}
+   493→                    className="w-1.5 h-1.5 rounded-full"
+   494→                    style={{ background: "var(--im-bubble-npc-text)" }}
+   495→                  />
+   496→                ))}
+   497→              </div>
+   498→            </div>
+   499→          </div>
+   500→        )}
+   501→      </div>
+   502→
+   503→      {/* 結束狀態 banner */}
+   504→      {isLocked && !showEnding && (
+   505→        <button
+   506→          onClick={() => setShowEnding(true)}
+   507→          className="mx-4 mb-2 py-2 rounded-xl text-xs font-medium active:scale-95 transition flex items-center justify-center gap-1.5"
+   508→          style={{
+   509→            background: conv.status === "succeeded" ? "rgba(48, 209, 88, 0.15)" : conv.status === "blocked" ? "rgba(255, 69, 58, 0.15)" : "rgba(255, 159, 10, 0.15)",
+   510→            color: conv.status === "succeeded" ? "#30d158" : conv.status === "blocked" ? "#ff453a" : "#ff9f0a",
+   511→          }}
+   512→        >
+   513→          {conv.status === "succeeded" ? (
+   514→            <><CheckCircle2 className="w-3.5 h-3.5" /> 點擊查看詐騙結果</>
+   515→          ) : conv.status === "blocked" ? (
+   516→            <><UserX className="w-3.5 h-3.5" /> 點擊查看對話分析</>
+   517→          ) : (
+   518→            <><AlertCircle className="w-3.5 h-3.5" /> 點擊查看對話結果</>
+   519→          )}
+   520→        </button>
+   521→      )}
+   522→
+   523→      {/* iOS iMessage 輸入區 */}
+   524→      {!isLocked && (
+   525→        <div
+   526→          className="px-2 py-2 border-t backdrop-blur-xl shrink-0"
+   527→          style={{
+   528→            background: "var(--im-header-bg)",
+   529→            borderColor: "var(--im-header-border)",
+   530→            // 同時處理軟鍵盤高度 + safe-area-bottom
+   531→            paddingBottom: `calc(0.75rem + ${keyboardHeight}px + env(safe-area-inset-bottom, 0px))`,
+   532→          }}
+   533→        >
+   534→          {/* 快捷话术/圖片面板 */}
+   535→          <AnimatePresence>
+   536→            {showQuickPhrases && (
+   537→              <QuickPhrases
+   538→                npc={npc}
+   539→                onPick={(text) => sendMessage(text)}
+   540→                onClose={() => setShowQuickPhrases(false)}
+   541→              />
+   542→            )}
+   543→            {showImageMaterials && (
+   544→              <ImageMaterials
+   545→                onPick={(mat) => sendMessage(input, mat)}
+   546→                onClose={() => setShowImageMaterials(false)}
+   547→              />
+   548→            )}
+   549→          </AnimatePresence>
+   550→
+   551→          <div className="flex items-end gap-1.5">
+   552→            {/* 圖片素材按鈕 */}
+   553→            <button
+   554→              onClick={() => { setShowImageMaterials(!showImageMaterials); setShowQuickPhrases(false); }}
+   555→              className="w-7 h-7 rounded-full flex items-center justify-center active:scale-95 transition shrink-0"
+   556→              style={{ color: "var(--im-link-text)" }}
+   557→              aria-label="圖片素材"
+   558→              title="發送偽造圖片素材"
+   559→            >
+   560→              <ImageIcon className="w-5 h-5" />
+   561→            </button>
+   562→
+   563→            {/* 輸入框 */}
+   564→            <div
+   565→              className="flex-1 flex items-end rounded-[18px] border overflow-hidden"
+   566→              style={{
+   567→                background: "var(--im-input-bg)",
+   568→                borderColor: "var(--im-input-border)",
+   569→              }}
+   570→            >
+   571→              <textarea
+   572→                ref={inputRef}
+   573→                value={input}
+   574→                onChange={(e) => setInput(e.target.value)}
+   575→                onKeyDown={handleKeyDown}
+   576→                onFocus={handleInputFocus}
+   577→                onClick={handleInputFocus}
+   578→                placeholder="iMessage"
+   579→                rows={1}
+   580→                disabled={thinking}
+   581→                className="flex-1 max-h-24 resize-none bg-transparent px-3 py-1.5 text-[15px] leading-[20px] focus:outline-none disabled:opacity-50"
+   582→                style={{
+   583→                  color: "var(--im-input-text)",
+   584→                  minHeight: "32px",
+   585→                }}
+   586→              />
+   587→              {/* 快捷话术按鈕（輸入框空白時顯示） */}
+   588→              {!input.trim() && (
+   589→                <button
+   590→                  onClick={() => { setShowQuickPhrases(!showQuickPhrases); setShowImageMaterials(false); }}
+   591→                  className="px-2 py-1.5 active:scale-95 transition"
+   592→                  style={{ color: "var(--im-link-text)" }}
+   593→                  aria-label="快捷话术"
+   594→                  title="快捷话术庫"
+   595→                >
+   596→                  <ChevronUp className="w-4 h-4" />
+   597→                </button>
+   598→              )}
+   599→            </div>
+   600→
+   601→            {/* iOS 藍色箭頭傳送按鈕 */}
+   602→            {input.trim().length > 0 && (
+   603→              <button
+   604→                onClick={() => sendMessage(input)}
+   605→                disabled={!canSend}
+   606→                className="w-7 h-7 rounded-full flex items-center justify-center active:scale-90 transition shrink-0"
+   607→                style={{
+   608→                  background: canSend ? "var(--im-link-text)" : "var(--im-bubble-npc-bg)",
+   609→                  color: canSend ? "#ffffff" : "var(--im-bubble-system-text)",
+   610→                }}
+   611→                aria-label="送出"
+   612→              >
+   613→                {thinking ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowUpIcon />}
+   614→              </button>
+   615→            )}
+   616→          </div>
+   617→        </div>
+   618→      )}
+   619→
+   620→      {/* 重新開始確認彈窗 */}
+   621→      <AnimatePresence>
+   622→        {showResetConfirm && (
+   623→          <motion.div
+   624→            initial={{ opacity: 0 }}
+   625→            animate={{ opacity: 1 }}
+   626→            exit={{ opacity: 0 }}
+   627→            onClick={() => setShowResetConfirm(false)}
+   628→            className="absolute inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-6"
+   629→          >
+   630→            <motion.div
+   631→              initial={{ scale: 0.9, opacity: 0 }}
+   632→              animate={{ scale: 1, opacity: 1 }}
+   633→              exit={{ scale: 0.9, opacity: 0 }}
+   634→              onClick={(e) => e.stopPropagation()}
+   635→              className="rounded-2xl border p-5 max-w-xs w-full"
+   636→              style={{ background: "var(--im-input-bg)", borderColor: "var(--im-header-border)" }}
+   637→            >
+   638→              <div className="flex items-center gap-2 mb-2">
+   639→                <AlertTriangle className="w-5 h-5 text-amber-400" />
+   640→                <h3 className="text-base font-bold" style={{ color: "var(--im-header-text)" }}>重新開始對話？</h3>
+   641→              </div>
+   642→              <p className="text-xs leading-relaxed mb-4" style={{ color: "var(--im-bubble-system-text)" }}>
+   643→                目前與 {npc.displayName} 的對話記錄將被清除，警惕值重置。已獲得的詐騙積分不會被歸還。
+   644→              </p>
+   645→              <div className="flex gap-2">
+   646→                <button
+   647→                  onClick={() => setShowResetConfirm(false)}
+   648→                  className="flex-1 py-2 rounded-lg text-xs font-medium active:scale-95 transition"
+   649→                  style={{ background: "var(--im-bubble-npc-bg)", color: "var(--im-bubble-npc-text)" }}
+   650→                >
+   651→                  取消
+   652→                </button>
+   653→                <button
+   654→                  onClick={handleReset}
+   655→                  className="flex-1 py-2 rounded-lg bg-red-500 text-white text-xs font-semibold hover:bg-red-600 active:scale-95 transition"
+   656→                >
+   657→                  確認重置
+   658→                </button>
+   659→              </div>
+   660→            </motion.div>
+   661→          </motion.div>
+   662→        )}
+   663→      </AnimatePresence>
+   664→
+   665→      {/* 結果面板 */}
+   666→      <AnimatePresence>
+   667→        {showEnding && (
+   668→          <EndingPanel
+   669→            npc={npc}
+   670→            conv={conv}
+   671→            onClose={() => setShowEnding(false)}
+   672→            onReset={handleReset}
+   673→            hasReset={hasReset}
+   674→          />
+   675→        )}
+   676→      </AnimatePresence>
+   677→
+   678→      {/* NPC 情報彈窗（點擊頭像觸發） */}
+   679→      <AnimatePresence>
+   680→        {showNpcInfo && (
+   681→          <NpcInfoModal npc={npc} onClose={() => setShowNpcInfo(false)} />
+   682→        )}
+   683→      </AnimatePresence>
+   684→    </div>
+   685→  );
+   686→}
+   687→
+   688→// iOS 風格向上箭頭
+   689→function ArrowUpIcon() {
+   690→  return (
+   691→    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+   692→      <path d="M8 3.5L3 8.5L4.05 9.55L7.2 6.4V13H8.8V6.4L11.95 9.55L13 8.5L8 3.5Z" />
+   693→    </svg>
+   694→  );
+   695→}
+   696→
+   697→function MessageBubble({
+   698→  msg,
+   699→  npcAvatar,
+   700→  showTimestamp,
+   701→  prevMsg,
+   702→  onAvatarClick,
+   703→  isFailed,
+   704→  onRetry,
+   705→}: {
+   706→  msg: ChatMessage;
+   707→  npcAvatar: string;
+   708→  showTimestamp: boolean;
+   709→  prevMsg?: ChatMessage;
+   710→  onAvatarClick?: () => void;
+   711→  isFailed?: boolean;
+   712→  onRetry?: () => void;
+   713→}) {
+   714→  // 系統訊息：置中，灰色圓角
+   715→  if (msg.role === "system") {
+   716→    const isAgree = msg.meta?.decision === "agree";
+   717→    const isBlock = msg.meta?.decision === "block";
+   718→    const isCautious = msg.meta?.decision === "cautious";
+   719→    return (
+   720→      <div className="flex justify-center my-2">
+   721→        <div
+   722→          className="text-[11px] px-3 py-1.5 rounded-full flex items-center gap-1.5 max-w-[85%] text-center"
+   723→          style={{
+   724→            background: isAgree ? "rgba(48, 209, 88, 0.15)" : isBlock ? "rgba(255, 69, 58, 0.15)" : isCautious ? "rgba(255, 159, 10, 0.15)" : "var(--im-bubble-system-bg)",
+   725→            color: isAgree ? "#30d158" : isBlock ? "#ff453a" : isCautious ? "#ff9f0a" : "var(--im-bubble-system-text)",
+   726→          }}
+   727→        >
+   728→          {isAgree && <CheckCircle2 className="w-3 h-3 shrink-0" />}
+   729→          {isBlock && <UserX className="w-3 h-3 shrink-0" />}
+   730→          {isCautious && <AlertCircle className="w-3 h-3 shrink-0" />}
+   731→          {msg.content}
+   732→        </div>
+   733→      </div>
+   734→    );
+   735→  }
+   736→
+   737→  const isPlayer = msg.role === "player";
+   738→  // 判斷是否為同一群組（連續同 role 5 分鐘內）
+   739→  const isGroupStart = !prevMsg || prevMsg.role !== msg.role || (msg.ts - prevMsg.ts) > 5 * 60 * 1000;
+   740→  // 顯示頭像 only 當 group end（最後一條同 role）
+   741→  const showAvatar = !isPlayer;
+   742→
+   743→  // 時間戳顯示（每 group start 顯示）
+   744→  const showTime = showTimestamp && isGroupStart;
+   745→
+   746→  return (
+   747→    <motion.div
+   748→      initial={{ opacity: 0, y: 4 }}
+   749→      animate={{ opacity: 1, y: 0 }}
+   750→      transition={{ duration: 0.15 }}
+   751→      className={`flex items-end gap-1.5 ${isPlayer ? "flex-row-reverse" : ""} ${isGroupStart ? "mt-2" : "mt-0.5"}`}
+   752→    >
+   753→      {/* NPC 頭像 - 可點擊查看情報 */}
+   754→      {showAvatar ? (
+   755→        <button
+   756→          onClick={() => onAvatarClick?.()}
+   757→          className="w-7 h-7 rounded-full flex items-center justify-center text-base shrink-0 active:scale-90 transition"
+   758→          style={{ background: "var(--im-bubble-npc-bg)" }}
+   759→          aria-label="查看情報"
+   760→        >
+   761→          {npcAvatar}
+   762→        </button>
+   763→      ) : (
+   764→        !isPlayer && <div className="w-7 shrink-0" />
+   765→      )}
+   766→
+   767→      <div className={`flex flex-col ${isPlayer ? "items-end" : "items-start"} max-w-[75%]`}>
+   768→        {showTime && (
+   769→          <div className="text-[10px] mb-1 px-2" style={{ color: "var(--im-timestamp-text)" }}>
+   770→            {new Date(msg.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+   771→          </div>
+   772→        )}
+   773→        <div
+   774→          className="px-3.5 py-2 text-[15px] leading-[20px] whitespace-pre-wrap break-words"
+   775→          style={{
+   776→            background: isPlayer ? "var(--im-bubble-player-bg)" : "var(--im-bubble-npc-bg)",
+   777→            color: isPlayer ? "var(--im-bubble-player-text)" : "var(--im-bubble-npc-text)",
+   778→            borderRadius: isPlayer
+   779→              ? isGroupStart ? "18px 18px 4px 18px" : "18px 4px 4px 18px"
+   780→              : isGroupStart ? "18px 18px 18px 4px" : "4px 18px 18px 4px",
+   781→          }}
+   782→        >
+   783→          {msg.meta?.imageType && (
+   784→            <div className="mb-1.5 px-2 py-1 rounded bg-black/20 text-[10px] inline-block">
+   785→              📎 圖片素材
+   786→            </div>
+   787→          )}
+   788→          {msg.content}
+   789→        </div>
+   790→        {/* 發送失敗指示器 */}
+   791→        {isFailed && isPlayer && (
+   792→          <div className="flex items-center gap-1 mt-0.5">
+   793→            <button
+   794→              onClick={onRetry}
+   795→              className="flex items-center gap-1 text-[11px] font-medium active:scale-95 transition"
+   796→              style={{ color: "#ff3b30" }}
+   797→            >
+   798→              <AlertCircle className="w-3.5 h-3.5" />
+   799→              發送失敗 · 點擊重試
+   800→            </button>
+   801→          </div>
+   802→        )}
+   803→      </div>
+   804→    </motion.div>
+   805→  );
+   806→}
+   807→
+   808→// NPC 情報彈窗（聊天室中點擊頭像查看）
+   809→function NpcInfoModal({ npc, onClose }: { npc: NpcProfile; onClose: () => void }) {
+   810→  const premiumNpcIds = useGameStore((s) => s.premiumNpcIds);
+   811→  const isPremium = premiumNpcIds.includes(npc.id);
+   812→  const textMain = "var(--im-header-text)";
+   813→  const textSub = "var(--im-bubble-system-text)";
+   814→
+   815→  return (
+   816→    <motion.div
+   817→      initial={{ opacity: 0 }}
+   818→      animate={{ opacity: 1 }}
+   819→      exit={{ opacity: 0 }}
+   820→      onClick={onClose}
+   821→      className="absolute inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end md:items-center justify-center p-3"
+   822→    >
+   823→      <motion.div
+   824→        initial={{ y: 50, opacity: 0 }}
+   825→        animate={{ y: 0, opacity: 1 }}
+   826→        exit={{ y: 50, opacity: 0 }}
+   827→        transition={{ type: "spring", stiffness: 300, damping: 30 }}
+   828→        onClick={(e) => e.stopPropagation()}
+   829→        className="w-full rounded-3xl border overflow-hidden max-h-[80%] flex flex-col"
+   830→        style={{ background: "var(--im-header-bg)", borderColor: "var(--im-header-border)" }}
+   831→      >
+   832→        <div className="p-5 border-b" style={{ borderColor: "var(--im-header-border)" }}>
+   833→          <div className="flex items-center gap-3">
+   834→            <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-4xl" style={{ background: "var(--im-bubble-npc-bg)" }}>{npc.avatar}</div>
+   835→            <div>
+   836→              <h3 className="text-lg font-bold" style={{ color: textMain }}>{npc.displayName}</h3>
+   837→              <p className="text-xs" style={{ color: textSub }}>年齡 {npc.age} 歲{isPremium ? " · 精準有料" : " · 普通料子"}</p>
+   838→            </div>
+   839→          </div>
+   840→        </div>
+   841→        <div className="p-5 space-y-4 overflow-y-auto scroll-safe-bottom">
+   842→          <div>
+   843→            <p className="text-[10px] font-medium uppercase tracking-wide mb-2" style={{ color: textSub }}>背景</p>
+   844→            <p className="text-sm leading-relaxed" style={{ color: textMain }}>{npc.background}</p>
+   845→          </div>
+   846→          <div>
+   847→            <p className="text-[10px] font-medium uppercase tracking-wide mb-2" style={{ color: textSub }}>可利用特質</p>
+   848→            <div className="flex flex-wrap gap-1.5">
+   849→              {npc.hookTags.map((tag) => (
+   850→                <span key={tag} className="px-2.5 py-1 rounded-full text-[11px] font-medium" style={{ background: "rgba(255,149,0,0.1)", border: "1px solid rgba(255,149,0,0.2)", color: "#ff9500" }}>{tag}</span>
+   851→              ))}
+   852→            </div>
+   853→          </div>
+   854→          {isPremium && (
+   855→            <div className="rounded-xl p-3" style={{ background: "rgba(255,149,0,0.08)", border: "1px solid rgba(255,149,0,0.2)" }}>
+   856→              <p className="text-[10px] font-medium uppercase tracking-wide mb-1.5" style={{ color: "#ff9500" }}>🔓 核心痛點</p>
+   857→              <p className="text-sm leading-relaxed" style={{ color: textMain }}>{npc.hiddenPersonality}</p>
+   858→            </div>
+   859→          )}
+   860→        </div>
+   861→        <div className="p-4 border-t" style={{ borderColor: "var(--im-header-border)" }}>
+   862→          <button onClick={onClose} className="w-full py-3 rounded-xl text-sm font-semibold active:scale-95 transition" style={{ background: "var(--im-link-text)", color: "#fff" }}>關閉</button>
+   863→        </div>
+   864→      </motion.div>
+   865→    </motion.div>
+   866→  );
+   867→}
+   868→

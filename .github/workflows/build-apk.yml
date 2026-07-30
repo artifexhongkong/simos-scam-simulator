@@ -119,32 +119,20 @@ jobs:
                       controller.hide(WindowInsetsCompat.Type.systemBars());
                   }
 
-                  // 延遲禁用 WebView 長按（防止長按訊息彈出選取手柄）
-                  // 注意：輸入框內部的選取手柄無法透過此方式禁用，
-                  // 因為 WebView (Chromium) 渲染自己的手柄，無法自訂。
-                  // 這裡只禁用非輸入元素的長按。
+                  // 延遲設定 WebView：允許長按選取文字（參考 ZAI-Assistant 專案）
+                  // 不禁用長按，讓系統預設的選取行為生效
+                  // 選取範圍顏色由 CSS ::selection 控制（iOS 藍半透明）
+                  // 選取手柄用系統預設（無法自訂，但行為正常）
                   new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                      View root = getWindow().getDecorView();
-                      disableLongClickRecursive(root);
-                  }, 500);
-              }
-
-              /** 遞迴遍歷 View 樹，禁用所有 WebView 的長按 */
-              private void disableLongClickRecursive(View view) {
-                  if (view instanceof WebView) {
-                      view.setOnLongClickListener(new View.OnLongClickListener() {
-                          @Override
-                          public boolean onLongClick(View v) {
-                              return true; // 消費長按事件
-                          }
-                      });
-                  }
-                  if (view instanceof android.view.ViewGroup) {
-                      android.view.ViewGroup group = (android.view.ViewGroup) view;
-                      for (int i = 0; i < group.getChildCount(); i++) {
-                          disableLongClickRecursive(group.getChildAt(i));
+                      if (this.bridge != null && this.bridge.getWebView() != null) {
+                          WebView webView = this.bridge.getWebView();
+                          // 允許長按選取（與 ZAI-Assistant 一致）
+                          webView.setOnLongClickListener(null);
+                          webView.setLongClickable(true);
+                          webView.setHapticFeedbackEnabled(true);
+                          webView.requestFocus(View.FOCUS_DOWN);
                       }
-                  }
+                  }, 500);
               }
 
               @Override

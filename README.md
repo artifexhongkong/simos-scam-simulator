@@ -154,7 +154,8 @@ APK 打包透過 GitHub Actions 自動執行：
 
 | 版本 | 主要更新 |
 |------|----------|
-| v1.50 | 選取手柄修正：移除所有無效的 drawable 覆寫（WebView 用 Chromium 自己的手柄，無法自訂），保留長按禁用 + CSS 優化 |
+| v1.51 | 套用 ZAI-Assistant 專案的選取手柄方案：允許長按選取文字、CSS `::selection` 控制選取範圍顏色（iOS 藍半透明）、移除長按禁用 |
+| v1.50 | 移除所有無效的 drawable 覆寫（WebView 用 Chromium 自己的手柄，無法自訂） |
 | v1.49 | 嘗試用 PNG drawable 取代 vector drawable（對 WebView 無效） |
 | v1.47 | README 加入 APK 下載連結、版本自動同步機制 |
 | v1.46 | 修正選取手柄顯示問題（CSS+JS 方案）、重新開始按鈕加入廣告機制（首次免費，之後看廣告） |

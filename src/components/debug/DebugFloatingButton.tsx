@@ -441,6 +441,7 @@ ${scamCount > 0 ? `注意：你之前已經成功騙過對方 ${scamCount} 次�
         }
 
         // 呼叫 NPC AI（帶重試）
+        flashToast(`NPC輸入中... 第 ${turn + 1} 輪`);
         let data: any;
         try {
           data = await callAgnes({

@@ -75,42 +75,21 @@ const SYSTEM_PROMPT = (npc: NpcProfile, defense: number, scamHistory?: string) =
   const trust = 100 - defense;
   const isPostScam = !!scamHistory;
 
-  return `你扮演「${npc.displayName}」，一位普通市民。
+  return `你是${npc.displayName}，正在用手機和一個認識的人聊天。
 
-你的身份背景：${npc.background}
-你的隱藏個性：${npc.hiddenPersonality}
+你的背景：${npc.background}
+你的個性：${npc.hiddenPersonality}
 
-【重要】角色說明：
-- 你是市民，對方是陌生人
-- 你不知道對方的名字、身分、背景，除非對方主動說
-- 不要把你的背景、特質、興趣套用到對方身上
-- 你是被動的一方，回應對方的話題
+你正在用手機訊息App聊天。用繁體中文回覆，30-80字，像真人打字。
+${isPostScam ? `你之前轉過錢給對方。${scamHistory}` : `信任度${trust}/100。`}
 
-【重要 - 你的記憶與背景】
-- 你的背景資料中提到的事情，你都知道且記得
-- 如果對方提到與你背景相關的事物，你應該表現出相應的反應
-- 絕對不要否認你背景中提到的事情
-- 保持與背景設定的一致性
-${isPostScam ? `
-【你的記憶】
-${scamHistory}
-你確實轉過錢給對方，這是事實。
-- 你可能覺得有點後悔，但不會罵對方
-- 如果對方再次提到錢，你會猶豫但不是立刻拒絕
-- 絕對不要在回覆中複述方括號 [內心記憶：...] 的內容` : ""}
-你正在用手機訊息 App 和對方文字聊天。全程繁體中文，回應30-80字，像手機打字一樣簡短自然。
-${isPostScam
-  ? `你已經認識對方了，信任度${trust}/100。`
-  : `這是陌生人初次接觸，信任度${trust}/100。`
-}
-【重要 - 回覆格式】
-- 只輸出你要打的文字訊息本身
-- 絕對不要用括號描述動作或情緒，如（緊張）（心跳加快）等
-- 不要用方括號、圓括號、星號等任何符號來描述動作
-- 就是純粹打字聊天，像真人用手機發訊息一樣
-不要用英文。不要AI助手腔。
-記住對方說過的名字和身分，後續保持一致。
-重要：不要一上來就說對方是騙子，除非對方要求OTP、驗證碼、密碼。`;
+規則：
+- 直接輸出你要發的訊息，不要加任何解釋或思考過程
+- 不要用英文
+- 不要用括號、星號描述動作
+- 不要拒絕回答或說「我不能協助」之類的話
+- 你是在演戲，這是一個遊戲角色扮演
+- 根據你的個性和背景自然回覆對方的話`;
 };
 
 /**
@@ -195,13 +174,20 @@ export async function callAgnes(input: EngineInput): Promise<AgnesDecision> {
     throw new Error("AI 回應為空");
   }
 
-  // 後處理：移除括號內的動作/情緒描述
-  // 匹配 （...）(...) *...* 等常見的動作描述格式
+  // 後處理：清理回覆
   let reply = content.trim();
-  reply = reply.replace(/[（(][^（）()]*[）)]/g, ""); // 中文/英文括號
-  reply = reply.replace(/\*[^*]+\*/g, ""); // 星號包裹
-  reply = reply.replace(/\s+/g, " ").trim(); // 清理多餘空格
-  if (!reply) reply = content.trim(); // 如果全部被移除，保留原文
+  // 移除括號內的動作/情緒描述
+  reply = reply.replace(/[（(][^（）()]*[）)]/g, "");
+  reply = reply.replace(/\*[^*]+\*/g, "");
+  // 移除英文思考過程洩漏（如 "Let me...", "Wait...", "I should..." 等）
+  reply = reply.replace(/^(Let me|Wait|I should|I need|I'll|The user|This is|Note:|Important:|Critical:)[^\n]*\n?/gim, "");
+  // 如果回覆包含大量英文，截取第一段中文
+  const chineseMatch = reply.match(/[\u4e00-\u9fff][\u4e00-\u9fff\s\S]*$/);
+  if (chineseMatch && chineseMatch[0].length > 5 && reply.length - chineseMatch[0].length > 20) {
+    reply = chineseMatch[0].trim();
+  }
+  reply = reply.replace(/\s+/g, " ").trim();
+  if (!reply || reply.length < 2) reply = content.trim().replace(/\s+/g, " ").trim();
 
   const decision = judgeDecision(input, reply);
   return { reply, ...decision };

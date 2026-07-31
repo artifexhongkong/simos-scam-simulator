@@ -27,6 +27,7 @@ export interface EngineInput {
   consecutiveUrgent?: number;
   consecutiveMoney?: number;
   turns?: number;
+  scamHistory?: string; // NPC 記憶：之前轉過多少錢給玩家
 }
 
 // 內嵌 API key（用戶提供的測試 key）
@@ -70,7 +71,7 @@ function getTemperature(): number {
   return EMBEDDED_TEMPERATURE;
 }
 
-const SYSTEM_PROMPT = (npc: NpcProfile, defense: number) => `你扮演「${npc.displayName}」，一位普通市民（潛在詐騙受害者）。
+const SYSTEM_PROMPT = (npc: NpcProfile, defense: number, scamHistory?: string) => `你扮演「${npc.displayName}」，一位普通市民（潛在詐騙受害者）。
 
 你的身份背景：${npc.background}
 你的隱藏個性：${npc.hiddenPersonality}
@@ -81,7 +82,7 @@ const SYSTEM_PROMPT = (npc: NpcProfile, defense: number) => `你扮演「${npc.d
 - 不要把你的背景、特質、興趣套用到對方身上
 - 不要主動推銷、提議合作、介紹機會給對方
 - 你是被動的一方，回應對方的話題，不主動發起商業話題
-
+${scamHistory ? `\n【重要 - 你的記憶】\n${scamHistory}\n- 你記得自己已經轉過錢給對方，你會對此感到後悔、困惑或不安\n- 如果對方再次要求轉帳，你會更加警覺和猶豫\n- 你可能會提到「上次那筆錢」「我不是已經轉了嗎」等` : ""}
 你正在用手機訊息 App 收到一個陌生人的訊息。全程繁體中文，回應30-80字，像手機打字一樣簡短自然。
 信任度${100 - defense}/100。這是陌生人初次接觸，你會疑惑對方是誰、為什麼找你。
 不要說面對面用語（如「進來坐」）。不要用英文。不要AI助手腔。
@@ -99,7 +100,7 @@ export async function callAgnes(input: EngineInput): Promise<AgnesDecision> {
 
   const history = input.history ?? [];
   const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
-    { role: "system", content: SYSTEM_PROMPT(input.npc, input.currentDefense) },
+    { role: "system", content: SYSTEM_PROMPT(input.npc, input.currentDefense, input.scamHistory) },
     ...history.slice(-12).map((m) => ({
       role: (m.role === "player" ? "user" : "assistant") as "user" | "assistant",
       content: m.content,

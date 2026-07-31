@@ -31,6 +31,7 @@ export function HomeScreen({ onOpenApp }: { onOpenApp: (app: AppName) => void })
   const dataTraffic = useGameStore((s) => s.dataTraffic);
   const riskLevel = useGameStore((s) => s.riskLevel);
   const scamScore = useGameStore((s) => s.scamScore);
+  const convertedAmount = useGameStore((s) => s.convertedAmount);
   const unreadSmsCount = useGameStore((s) => s.unreadSmsCount);
 
   // 計算未讀訊息數
@@ -143,9 +144,12 @@ export function HomeScreen({ onOpenApp }: { onOpenApp: (app: AppName) => void })
               </div>
               <div className="flex flex-col items-end">
                 <span className="text-amber-500 text-sm font-bold">
-                  ${scamScore.toLocaleString()}
+                  ${(scamScore - convertedAmount).toLocaleString()}
                 </span>
-                <span className="text-[9px]" style={{ color: textSub }}>總騙金額</span>
+                <span className="text-[9px]" style={{ color: textSub }}>可用金額</span>
+                <span className="text-[8px] mt-0.5" style={{ color: textSub }}>
+                  總騙 ${scamScore.toLocaleString()}
+                </span>
               </div>
             </div>
 

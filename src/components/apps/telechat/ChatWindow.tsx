@@ -209,6 +209,15 @@ export function ChatWindow({ npc, onBack }: { npc: NpcProfile; onBack: () => voi
     const updatedConv = useGameStore.getState().conversations[npc.id];
     if (!updatedConv) return;
 
+    // 構建 NPC 的詐騙記憶（如果之前轉過錢給玩家）
+    let scamHistory: string | undefined;
+    if ((updatedConv.scamCount ?? 0) > 0) {
+      const transfers = updatedConv.messages
+        .filter((m) => m.meta?.decision === "agree" && m.meta?.amount)
+        .map((m) => `$${m.meta!.amount!.toLocaleString()}`);
+      scamHistory = `你之前已經轉過錢給這個陌生人，共 ${updatedConv.scamCount} 次，總計 ${updatedConv.totalPayout?.toLocaleString() ? '$' + updatedConv.totalPayout.toLocaleString() : '不明金額'}。轉帳記錄：${transfers.join('、')}。`;
+    }
+
     try {
       const data = await callAgnes({
         sessionId: `${npc.id}-${updatedConv.startedAt}`,
@@ -219,6 +228,7 @@ export function ChatWindow({ npc, onBack }: { npc: NpcProfile; onBack: () => voi
         consecutiveUrgent: updatedConv.consecutiveUrgent,
         consecutiveMoney: updatedConv.consecutiveMoney,
         turns: updatedConv.turns,
+        scamHistory,
       });
 
       // AI 連線成功 → 標記為已驗證，之後不再驗證

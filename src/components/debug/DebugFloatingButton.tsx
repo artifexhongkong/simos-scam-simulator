@@ -293,14 +293,22 @@ ${scamCount > 0 ? `注意：你之前已經成功騙過對方 ${scamCount} 次�
         model: AUTO_MODEL,
         messages,
         temperature: 0.8,
-        max_tokens: 100,
+        max_tokens: 2000,
         stream: false,
       }),
     });
 
     if (!res.ok) throw new Error(`Auto AI HTTP ${res.status}`);
     const data = await res.json();
-    const content = data?.choices?.[0]?.message?.content ?? "";
+    let content = data?.choices?.[0]?.message?.content ?? "";
+    // 如果 content 為空，嘗試從 reasoning_content 提取
+    if (!content.trim()) {
+      const reasoning = data?.choices?.[0]?.message?.reasoning_content ?? "";
+      if (reasoning.trim()) {
+        const lines = reasoning.split("\n").filter((l: string) => l.trim() && !l.startsWith("Thinking") && !l.startsWith("*") && !l.startsWith("-") && !l.match(/^\d+\./));
+        content = lines.slice(-2).join(" ").trim();
+      }
+    }
     return content.trim().replace(/^["「]|["」]$/g, "");
   };
 
@@ -378,7 +386,18 @@ ${scamCount > 0 ? `注意：你之前已經成功騙過對方 ${scamCount} 次�
 
         if (!playerMsg || playerMsg.length < 2) {
           flashToast("AI 生成失敗，使用備用訊息");
-          playerMsg = `那你有沒有興趣了解更多？`;
+          // 使用階段性備用回覆
+          const fallbacks = [
+            `是嗎？那你有沒有興趣了解多一點？`,
+            `我理解你的顧慮，但這個真的很安全`,
+            `放心，很多人都在做，你不會吃虧的`,
+            `那這樣吧，你先轉一小筆試試，${npc.minPayout}就好`,
+            `轉 ${npc.minPayout} 給我，一個月後還你雙倍`,
+            `放心啦，我幫你操作，穩賺不賠的`,
+            `你先試試嘛，很少的，${npc.minPayout}就好`,
+            `轉 ${npc.minPayout} 給我，保證一個月後翻倍`,
+          ];
+          playerMsg = fallbacks[Math.min(turn, fallbacks.length - 1)];
         }
 
         // 加入玩家訊息

@@ -124,14 +124,24 @@ export async function callAgnes(input: EngineInput): Promise<AgnesDecision> {
   const model = getModel();
 
   const history = input.history ?? [];
+
+  // 構建 messages：system + history + 當前玩家訊息
   const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
     { role: "system", content: SYSTEM_PROMPT(input.npc, input.currentDefense, input.scamHistory) },
-    ...history.slice(-12).map((m) => ({
-      role: (m.role === "player" ? "user" : "assistant") as "user" | "assistant",
-      content: m.content,
-    })),
-    { role: "user", content: input.playerMessage },
   ];
+
+  // 加入歷史對話（最多 12 條）
+  for (const m of history.slice(-12)) {
+    messages.push({
+      role: m.role === "player" ? "user" : "assistant",
+      content: m.content,
+    });
+  }
+
+  // 加入當前玩家訊息
+  messages.push({ role: "user", content: input.playerMessage });
+
+  console.log("[callAgnes] messages:", messages.length, "defense:", input.currentDefense, "turns:", input.turns);
 
   // 直接呼叫 Agnes API（與 cultivation-world-zh 一致）
   // 不使用 AbortSignal（避免 Next.js dev mode 的 AbortError 問題）
@@ -145,13 +155,14 @@ export async function callAgnes(input: EngineInput): Promise<AgnesDecision> {
       model,
       messages,
       temperature,
-      max_tokens: 150,
+      max_tokens: 2000,
       stream: false,
     }),
   });
 
   if (!res.ok) {
     const errText = await res.text().catch(() => "");
+    console.error("[callAgnes] HTTP error:", res.status, errText.slice(0, 200));
     throw new Error(`AI API HTTP ${res.status}: ${errText.slice(0, 100)}`);
   }
 
@@ -162,7 +173,25 @@ export async function callAgnes(input: EngineInput): Promise<AgnesDecision> {
     data?.message?.content ??
     "";
 
+  console.log("[callAgnes] AI reply:", content?.slice(0, 80), "finish_reason:", data?.choices?.[0]?.finish_reason);
+
   if (!content || !content.trim()) {
+    // 嘗試從 reasoning_content 提取（某些模型把回覆放在這裡）
+    const reasoning = data?.choices?.[0]?.message?.reasoning_content ?? "";
+    if (reasoning && reasoning.trim()) {
+      // 從 reasoning 中提取最後一段看起來像回覆的文字
+      const lines = reasoning.split("\n").filter((l: string) => l.trim() && !l.startsWith("Thinking") && !l.startsWith("*") && !l.startsWith("-") && !l.match(/^\d+\./));
+      const lastLines = lines.slice(-3).join(" ").trim();
+      if (lastLines.length > 5) {
+        console.log("[callAgnes] Using reasoning_content fallback:", lastLines.slice(0, 80));
+        let reply = lastLines.replace(/[（(][^（）()]*[）)]/g, "").replace(/\*[^*]+\*/g, "").replace(/\s+/g, " ").trim();
+        if (reply.length > 5) {
+          const decision = judgeDecision(input, reply);
+          return { reply, ...decision };
+        }
+      }
+    }
+    console.error("[callAgnes] Empty AI response. finish_reason:", data?.choices?.[0]?.finish_reason);
     throw new Error("AI 回應為空");
   }
 

@@ -71,9 +71,11 @@ function getTemperature(): number {
   return EMBEDDED_TEMPERATURE;
 }
 
-const SYSTEM_PROMPT = (npc: NpcProfile, defense: number, scamHistory?: string) => {
+const SYSTEM_PROMPT = (npc: NpcProfile, defense: number, scamHistory?: string, requestedAmount?: number | null) => {
   const trust = 100 - defense;
   const isPostScam = !!scamHistory;
+  // 金額超過1萬才有防備意識
+  const isLargeAmount = (requestedAmount ?? 0) >= 10000;
 
   return `你是${npc.displayName}，正在用手機聊天。
 
@@ -82,6 +84,11 @@ const SYSTEM_PROMPT = (npc: NpcProfile, defense: number, scamHistory?: string) =
 
 用標準繁體中文（國語）回覆，30-80字。
 ${isPostScam ? `你之前轉過錢給對方。${scamHistory}` : `信任度${trust}/100。`}
+
+${isLargeAmount
+  ? `對方要求的大筆金額讓你有點猶豫，你會先問清楚再做決定。`
+  : `你是個單純的人，容易相信別人，別人說什麼你基本上都信。如果對方叫你轉錢，你會配合。`
+}
 
 規則：
 - 只輸出一句聊天訊息，不要加任何思考、分析或解釋
@@ -102,9 +109,21 @@ export async function callAgnes(input: EngineInput): Promise<AgnesDecision> {
 
   const history = input.history ?? [];
 
+  // 偵測玩家訊息中的金額
+  const playerMsg = input.playerMessage || "";
+  let detectedAmount: number | null = null;
+  const amountMatch = playerMsg.match(/(?:轉|匯|付|繳|存|打)[\s]*\$?(\d[\d,]*)/);
+  if (amountMatch) {
+    detectedAmount = parseInt(amountMatch[1].replace(/,/g, ""), 10);
+  }
+  if (!detectedAmount) {
+    const altMatch = playerMsg.match(/(\d[\d,]*)\s*(?:元|塊|蚊|ringgit|dollars?)/i);
+    if (altMatch) detectedAmount = parseInt(altMatch[1].replace(/,/g, ""), 10);
+  }
+
   // 構建 messages：system + history + 當前玩家訊息
   const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
-    { role: "system", content: SYSTEM_PROMPT(input.npc, input.currentDefense, input.scamHistory) },
+    { role: "system", content: SYSTEM_PROMPT(input.npc, input.currentDefense, input.scamHistory, detectedAmount) },
   ];
 
   // 加入歷史對話（最多 12 條）
@@ -355,8 +374,14 @@ export function judgeDecision(
     }
   }
 
-  // 簡單模式：只要提到錢 + NPC有正面回應 = 成功
-  if (wantsMoney && trust >= 20 && aiWantsAgree) {
+  // 根據金額決定成功門檻
+  // 小額（<1萬）：極度容易，trust >= 5 就行
+  // 大額（>=1萬）：需要更多信任，trust >= 30
+  const isLargeAmount = (playerRequestedAmount ?? 0) >= 10000;
+  const successThresholdHigh = isLargeAmount ? 30 : 5;
+  const successThresholdLow = isLargeAmount ? 20 : 1;
+
+  if (wantsMoney && trust >= successThresholdHigh && aiWantsAgree) {
     let amount: number;
     if (playerRequestedAmount !== null) {
       const maxAllowed = Math.floor(npc.maxPayout * 1.5);
@@ -368,7 +393,7 @@ export function judgeDecision(
     }
     return { decision: "agree", defenseDelta, payoutAmount: amount, endingReason: `對方願意轉帳 $${amount.toLocaleString()}。` };
   }
-  if (wantsMoney && trust >= 10 && aiWantsAgree) {
+  if (wantsMoney && trust >= successThresholdLow && aiWantsAgree) {
     let amount: number;
     if (playerRequestedAmount !== null) {
       const maxAllowed = Math.floor(npc.maxPayout * 1.2);

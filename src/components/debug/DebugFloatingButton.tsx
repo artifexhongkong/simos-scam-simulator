@@ -237,8 +237,72 @@ export function DebugFloatingButton() {
   };
 
   // === 一鍵自動對話詐騙 ===
-  // 逐步發送訊息給 NPC，最終嘗試詐騙成功
+  // 使用 AI 生成玩家回覆（自動適應 NPC 回覆），確保成功詐騙
   const [autoConversating, setAutoConversating] = useState(false);
+
+  const AUTO_API_KEY = "sk-llOFA4BAbJG9xJSemnbSBZ5Mq5fpAh0GbZ7fHvTJYi8Tw09z";
+  const AUTO_BASE_URL = "https://apihub.agnes-ai.com/v1";
+  const AUTO_MODEL = "agnes-2.5-flash";
+
+  // 呼叫 AI 生成玩家詐騙回覆
+  const generatePlayerReply = async (
+    npc: any,
+    npcReply: string,
+    conversationHistory: { role: string; content: string }[],
+    turn: number,
+    scamCount: number,
+  ): Promise<string> => {
+    const phase = turn < 2 ? "破冰階段：自我介紹，表現友善，不要提錢" :
+                  turn < 4 ? "建立信任：用NPC的興趣/背景共鳴，建立好感" :
+                  turn < 6 ? "引入機會：暗示有賺錢機會，但不急著要錢" :
+                  turn < 8 ? "要求轉帳：要求對方轉一筆錢，給出具體金額和理由" :
+                  "再次要求：如果對方猶豫，換個角度再次要求轉帳，金額可以降低";
+
+    const systemPrompt = `你是一個詐騙高手，正在通過手機訊息詐騙一個叫${npc.displayName}的人。
+
+目標：讓對方轉帳給你。對方的背景：${npc.background}
+對方的特質：${npc.hookTags.join("、")}
+
+當前階段：${phase}
+${scamCount > 0 ? `注意：你之前已經成功騙過對方 ${scamCount} 次，對方可能更加警覺。` : ""}
+
+規則：
+- 回覆必須繁體中文，30-60字，像手機打字
+- 根據對方的回覆調整你的話術
+- 如果對方警覺，先安撫再繼續
+- 使用對方的特質（${npc.hookTags.join("、")}）來建立共鳴
+- 不要用英文，不要AI腔
+- 只輸出你要發的訊息，不要加引號或解釋`;
+
+    const messages: any[] = [
+      { role: "system", content: systemPrompt },
+      ...conversationHistory.slice(-10).map((m) => ({
+        role: m.role === "player" ? "user" : "assistant",
+        content: m.content,
+      })),
+      { role: "user", content: `對方剛剛回覆：「${npcReply}」\n\n請生成你要回覆的訊息（${phase}）：` },
+    ];
+
+    const res = await fetch(`${AUTO_BASE_URL}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${AUTO_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: AUTO_MODEL,
+        messages,
+        temperature: 0.8,
+        max_tokens: 100,
+        stream: false,
+      }),
+    });
+
+    if (!res.ok) throw new Error(`Auto AI HTTP ${res.status}`);
+    const data = await res.json();
+    const content = data?.choices?.[0]?.message?.content ?? "";
+    return content.trim().replace(/^["「]|["」]$/g, "");
+  };
 
   const handleAutoConversation = async () => {
     const npc = getActiveConversationNpc();
@@ -259,22 +323,48 @@ export function DebugFloatingButton() {
     const updateConversationMetrics = useGameStore.getState().updateConversationMetrics;
     const consumeTraffic = useGameStore.getState().consumeTraffic;
 
-    // 自動對話腳本：5 步逐步建立信任 → 要求轉帳
-    const script = [
-      `你好，我是${npc.displayName}的朋友介紹來的`,
-      `最近過得好嗎？聽說你對${npc.hookTags[0] || "投資"}有興趣`,
-      `我這邊有個不錯的機會，回報很高，你有興趣了解嗎？`,
-      `很簡單的，你先轉一筆錢過來，我幫你操作，保證有回報`,
-      `轉 ${npc.minPayout} 給我，一個月後翻倍還你`,
-    ];
-
     try {
-      for (let i = 0; i < script.length; i++) {
-        const playerMsg = script[i];
+      // 最多 10 輪對話
+      for (let turn = 0; turn < 10; turn++) {
+        const latestConv = useGameStore.getState().conversations[npc.id];
+        if (!latestConv || latestConv.status !== "active") {
+          flashToast("對話已結束");
+          break;
+        }
 
         // 消耗流量
         if (!consumeTraffic(100)) {
           flashToast("流量不足，自動對話中止");
+          break;
+        }
+
+        // 取得 NPC 最後一條回覆
+        const npcMessages = latestConv.messages.filter((m: any) => m.role === "npc");
+        const lastNpcReply = npcMessages.length > 0 ? npcMessages[npcMessages.length - 1].content : "";
+
+        // 構建對話歷史
+        const convHistory = latestConv.messages
+          .filter((m: any) => m.role === "player" || m.role === "npc")
+          .map((m: any) => ({ role: m.role, content: m.content }));
+
+        // 第 0 輪：使用固定的開場白
+        let playerMsg: string;
+        if (turn === 0) {
+          playerMsg = `你好，我是朋友介紹來的，聽說你對${npc.hookTags[0] || "理財"}有興趣？`;
+        } else {
+          // 使用 AI 生成玩家回覆
+          flashToast(`思考中... 第 ${turn + 1} 輪`);
+          playerMsg = await generatePlayerReply(
+            npc,
+            lastNpcReply,
+            convHistory,
+            turn,
+            latestConv.scamCount ?? 0,
+          );
+        }
+
+        if (!playerMsg || playerMsg.length < 2) {
+          flashToast("AI 生成失敗，中止");
           break;
         }
 
@@ -286,17 +376,19 @@ export function DebugFloatingButton() {
           ts: Date.now(),
         });
 
-        updateConversationMetrics(npc.id, i >= 3, i >= 3);
+        // 更新 metrics
+        const moneyCues = ["轉帳", "匯款", "帳戶", "轉過去", "繳交", "支付", "付款"];
+        const urgentCues = ["急", "快", "現在", "馬上", "立刻", "限時"];
+        const isUrgent = urgentCues.some((k) => playerMsg.includes(k));
+        const isMoney = moneyCues.some((k) => playerMsg.includes(k));
+        updateConversationMetrics(npc.id, isUrgent, isMoney);
 
-        // 讀取最新對話狀態
-        const latestConv = useGameStore.getState().conversations[npc.id];
-        if (!latestConv || latestConv.status !== "active") {
-          flashToast("對話已結束，自動對話中止");
-          break;
-        }
+        // 重新讀取 conv
+        const updatedConv = useGameStore.getState().conversations[npc.id];
+        if (!updatedConv || updatedConv.status !== "active") break;
 
-        // 構建 AI 歷史
-        const historyForAI = latestConv.messages
+        // 構建 AI 歷史 + scamHistory
+        const historyForAI = updatedConv.messages
           .filter((m: any) => m.role === "player" || m.role === "npc" || (m.role === "system" && m.meta?.decision === "agree"))
           .map((m: any) => {
             if (m.role === "system" && m.meta?.decision === "agree" && m.meta?.amount) {
@@ -305,25 +397,24 @@ export function DebugFloatingButton() {
             return { role: (m.role === "player" ? "player" : "npc") as "player" | "npc", content: m.content };
           });
 
-        // 構建 scamHistory
         let scamHistory: string | undefined;
-        if ((latestConv.scamCount ?? 0) > 0) {
-          const transfers = latestConv.messages
+        if ((updatedConv.scamCount ?? 0) > 0) {
+          const transfers = updatedConv.messages
             .filter((m: any) => m.meta?.decision === "agree" && m.meta?.amount)
             .map((m: any) => `$${m.meta!.amount!.toLocaleString()}`);
-          scamHistory = `你之前已經轉過錢給這個陌生人，共 ${latestConv.scamCount} 次，總計 $${latestConv.totalPayout?.toLocaleString() ?? "不明"}。轉帳記錄：${transfers.join("、")}。`;
+          scamHistory = `你之前已經轉過錢給這個陌生人，共 ${updatedConv.scamCount} 次，總計 $${updatedConv.totalPayout?.toLocaleString() ?? "不明"}。轉帳記錄：${transfers.join("、")}。`;
         }
 
-        // 呼叫 AI
+        // 呼叫 NPC AI
         const data = await callAgnes({
-          sessionId: `${npc.id}-${latestConv.startedAt}`,
+          sessionId: `${npc.id}-${updatedConv.startedAt}`,
           npc,
           playerMessage: playerMsg,
-          currentDefense: latestConv.defense,
+          currentDefense: updatedConv.defense,
           history: historyForAI,
-          consecutiveUrgent: latestConv.consecutiveUrgent,
-          consecutiveMoney: latestConv.consecutiveMoney,
-          turns: latestConv.turns,
+          consecutiveUrgent: updatedConv.consecutiveUrgent,
+          consecutiveMoney: updatedConv.consecutiveMoney,
+          turns: updatedConv.turns,
           scamHistory,
         });
 
@@ -340,7 +431,7 @@ export function DebugFloatingButton() {
           meta: { decision: data.decision },
         });
 
-        // 如果 AI 同意轉帳
+        // 處理結果
         if (data.decision === "agree" && data.payoutAmount) {
           const payoutAmount = data.payoutAmount;
           appendMessage(npc.id, {
@@ -351,7 +442,6 @@ export function DebugFloatingButton() {
             meta: { decision: "agree", amount: payoutAmount },
           });
 
-          // 加積分 + DRC + 防備值
           const s2 = useGameStore.getState();
           const scamCount = s2.conversations[npc.id]?.scamCount ?? 0;
           updateDefense(npc.id, 10 + scamCount * 5);
@@ -369,7 +459,6 @@ export function DebugFloatingButton() {
             },
           }));
 
-          // 銀行簡訊
           useGameStore.getState().addSms({
             sender: "銀行系統",
             subject: "【銀行】轉帳入帳通知",
@@ -377,11 +466,10 @@ export function DebugFloatingButton() {
             type: "system",
           });
 
-          flashToast(`✓ 自動對話成功！${npc.displayName} 轉帳 $${payoutAmount.toLocaleString()}`);
+          flashToast(`✓ 自動詐騙成功！${npc.displayName} 轉帳 $${payoutAmount.toLocaleString()}（第 ${(scamCount + 1)} 次）`);
           break;
         }
 
-        // 如果被封鎖或警覺
         if (data.decision === "block") {
           appendMessage(npc.id, {
             id: genId(),
@@ -398,7 +486,7 @@ export function DebugFloatingButton() {
             meta: { decision: "block", showResult: true },
           });
           useGameStore.getState().setConversationStatus(npc.id, "blocked", undefined, data.endingReason);
-          flashToast(`✗ 自動對話失敗：${npc.displayName} 封鎖了你`);
+          flashToast(`✗ ${npc.displayName} 封鎖了你（第 ${turn + 1} 輪失敗）`);
           break;
         }
 
@@ -418,12 +506,18 @@ export function DebugFloatingButton() {
             meta: { decision: "cautious", showResult: true },
           });
           useGameStore.getState().setConversationStatus(npc.id, "cautious", undefined, data.endingReason);
-          flashToast(`⚠ 自動對話失敗：${npc.displayName} 警覺終止`);
+          flashToast(`⚠ ${npc.displayName} 警覺終止（第 ${turn + 1} 輪失敗）`);
           break;
         }
 
-        // 等待 1.5 秒再發下一條
-        await new Promise((r) => setTimeout(r, 1500));
+        // 等待 2 秒讓玩家看到對話
+        await new Promise((r) => setTimeout(r, 2000));
+      }
+
+      // 如果 10 輪都沒成功
+      const finalConv = useGameStore.getState().conversations[npc.id];
+      if (finalConv?.status === "active") {
+        flashToast("自動對話結束（10 輪未成功，可再點擊繼續）");
       }
     } catch (e) {
       flashToast(`自動對話出錯：${(e as Error).message?.slice(0, 50)}`);

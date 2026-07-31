@@ -275,6 +275,15 @@ export function ChatWindow({ npc, onBack }: { npc: NpcProfile; onBack: () => voi
           scamScore: s.scamScore + payoutAmount,
           darkCoin: s.darkCoin + Math.floor(payoutAmount / 100),
         }));
+
+        // 發送銀行轉帳入帳簡訊通知
+        useGameStore.getState().addSms({
+          sender: "銀行系統",
+          subject: "【銀行】轉帳入帳通知",
+          body: `您的帳戶已收到 $${payoutAmount.toLocaleString()} 轉帳。來源：${npc.displayName}。餘額已更新。`,
+          type: "system",
+        });
+
         setSuccessAnim(true);
         setTimeout(() => setSuccessAnim(false), 2500);
       } else if (data.decision === "block") {

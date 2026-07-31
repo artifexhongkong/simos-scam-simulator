@@ -22,6 +22,10 @@ import {
 import { useGameStore } from "@/lib/game/store";
 import { getAllNpcs } from "@/lib/game/npcs";
 
+function genId() {
+  return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
 /**
  * Debug 浮窗按鈕
  *
@@ -122,7 +126,7 @@ export function DebugFloatingButton() {
     return null;
   };
 
-  // 一鍵詐騙成功
+  // 一鍵詐騙成功（保持對話 active，可繼續詐騙）
   const handleScamSuccess = () => {
     const npc = getActiveConversationNpc();
     if (!npc) {
@@ -130,7 +134,45 @@ export function DebugFloatingButton() {
       return;
     }
     const payout = Math.floor(npc.minPayout + Math.random() * (npc.maxPayout - npc.minPayout));
-    setConversationStatus(npc.id, "succeeded", payout, "【Debug】一鍵詐騙成功");
+
+    // 加入系統訊息到聊天
+    const sysMsg = {
+      id: genId(),
+      role: "system" as const,
+      content: `✓ ${npc.displayName} 已同意轉帳 $${payout.toLocaleString()}。款項已到帳。你可以繼續與對方對話。`,
+      ts: Date.now(),
+      meta: { decision: "agree" as const, amount: payout },
+    };
+    useGameStore.getState().appendMessage(npc.id, sysMsg);
+
+    // 保持對話 active，加積分 + DRC，提升防備值
+    const s = useGameStore.getState();
+    const conv = s.conversations[npc.id];
+    const scamCount = conv?.scamCount ?? 0;
+    const defenseIncrease = 20 + scamCount * 10;
+    s.updateDefense(npc.id, defenseIncrease);
+
+    useGameStore.setState((st) => ({
+      scamScore: st.scamScore + payout,
+      darkCoin: st.darkCoin + Math.floor(payout / 100),
+      conversations: {
+        ...st.conversations,
+        [npc.id]: {
+          ...st.conversations[npc.id],
+          scamCount: scamCount + 1,
+          totalPayout: (st.conversations[npc.id]?.totalPayout ?? 0) + payout,
+        },
+      },
+    }));
+
+    // 發送轉帳確認簡訊
+    s.addSms({
+      sender: "銀行系統",
+      subject: "【銀行】轉帳入帳通知",
+      body: `您的帳戶已收到 $${payout.toLocaleString()} 轉帳。來源：${npc.displayName}。餘額已更新。`,
+      type: "system",
+    });
+
     flashToast(`✓ ${npc.displayName} 詐騙成功 +$${payout.toLocaleString()}`);
   };
 
@@ -141,6 +183,24 @@ export function DebugFloatingButton() {
       flashToast("沒有活躍對話");
       return;
     }
+    // 加入系統訊息
+    const sysMsg = {
+      id: genId(),
+      role: "system" as const,
+      content: `✗ ${npc.displayName} 已將你封鎖。對話終止。`,
+      ts: Date.now(),
+      meta: { decision: "block" as const },
+    };
+    useGameStore.getState().appendMessage(npc.id, sysMsg);
+    // 加入「查看結果」可點擊訊息
+    const resultMsg = {
+      id: genId(),
+      role: "system" as const,
+      content: "📊 點擊查看對話分析",
+      ts: Date.now() + 1,
+      meta: { decision: "block" as const, showResult: true } as any,
+    };
+    useGameStore.getState().appendMessage(npc.id, resultMsg);
     setConversationStatus(npc.id, "blocked", undefined, "【Debug】一鍵被封鎖");
     flashToast(`✗ ${npc.displayName} 已封鎖`);
   };
@@ -152,6 +212,24 @@ export function DebugFloatingButton() {
       flashToast("沒有活躍對話");
       return;
     }
+    // 加入系統訊息
+    const sysMsg = {
+      id: genId(),
+      role: "system" as const,
+      content: `⚠ ${npc.displayName} 不願再繼續討論這件事。對話結束。`,
+      ts: Date.now(),
+      meta: { decision: "cautious" as const },
+    };
+    useGameStore.getState().appendMessage(npc.id, sysMsg);
+    // 加入「查看結果」可點擊訊息
+    const resultMsg = {
+      id: genId(),
+      role: "system" as const,
+      content: "📊 點擊查看對話分析",
+      ts: Date.now() + 1,
+      meta: { decision: "cautious" as const, showResult: true } as any,
+    };
+    useGameStore.getState().appendMessage(npc.id, resultMsg);
     setConversationStatus(npc.id, "cautious", undefined, "【Debug】一鍵警覺終止");
     flashToast(`⚠ ${npc.displayName} 警覺終止`);
   };

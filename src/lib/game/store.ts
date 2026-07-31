@@ -14,6 +14,7 @@ export interface ChatMessage {
     amount?: number;
     defense?: number;
     imageType?: string;
+    showResult?: boolean;
   };
 }
 

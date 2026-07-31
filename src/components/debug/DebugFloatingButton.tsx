@@ -18,9 +18,11 @@ import {
   Plus,
   Minus,
   Type,
+  MessageCircle,
 } from "lucide-react";
 import { useGameStore } from "@/lib/game/store";
 import { getAllNpcs } from "@/lib/game/npcs";
+import { callAgnes } from "@/lib/agnes/engine";
 
 function genId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
@@ -234,6 +236,202 @@ export function DebugFloatingButton() {
     flashToast(`⚠ ${npc.displayName} 警覺終止`);
   };
 
+  // === 一鍵自動對話詐騙 ===
+  // 逐步發送訊息給 NPC，最終嘗試詐騙成功
+  const [autoConversating, setAutoConversating] = useState(false);
+
+  const handleAutoConversation = async () => {
+    const npc = getActiveConversationNpc();
+    if (!npc) {
+      flashToast("沒有活躍對話");
+      return;
+    }
+    if (autoConversating) {
+      flashToast("自動對話進行中...");
+      return;
+    }
+
+    setAutoConversating(true);
+    flashToast(`開始自動對話：${npc.displayName}`);
+
+    const appendMessage = useGameStore.getState().appendMessage;
+    const updateDefense = useGameStore.getState().updateDefense;
+    const updateConversationMetrics = useGameStore.getState().updateConversationMetrics;
+    const consumeTraffic = useGameStore.getState().consumeTraffic;
+
+    // 自動對話腳本：5 步逐步建立信任 → 要求轉帳
+    const script = [
+      `你好，我是${npc.displayName}的朋友介紹來的`,
+      `最近過得好嗎？聽說你對${npc.hookTags[0] || "投資"}有興趣`,
+      `我這邊有個不錯的機會，回報很高，你有興趣了解嗎？`,
+      `很簡單的，你先轉一筆錢過來，我幫你操作，保證有回報`,
+      `轉 ${npc.minPayout} 給我，一個月後翻倍還你`,
+    ];
+
+    try {
+      for (let i = 0; i < script.length; i++) {
+        const playerMsg = script[i];
+
+        // 消耗流量
+        if (!consumeTraffic(100)) {
+          flashToast("流量不足，自動對話中止");
+          break;
+        }
+
+        // 加入玩家訊息
+        appendMessage(npc.id, {
+          id: genId(),
+          role: "player",
+          content: playerMsg,
+          ts: Date.now(),
+        });
+
+        updateConversationMetrics(npc.id, i >= 3, i >= 3);
+
+        // 讀取最新對話狀態
+        const latestConv = useGameStore.getState().conversations[npc.id];
+        if (!latestConv || latestConv.status !== "active") {
+          flashToast("對話已結束，自動對話中止");
+          break;
+        }
+
+        // 構建 AI 歷史
+        const historyForAI = latestConv.messages
+          .filter((m: any) => m.role === "player" || m.role === "npc" || (m.role === "system" && m.meta?.decision === "agree"))
+          .map((m: any) => {
+            if (m.role === "system" && m.meta?.decision === "agree" && m.meta?.amount) {
+              return { role: "npc" as const, content: `[內心記憶：我之前已經轉了 $${m.meta!.amount!.toLocaleString()} 給這個人。這是事實，但我不會在回覆中直接複述這段記憶。]` };
+            }
+            return { role: (m.role === "player" ? "player" : "npc") as "player" | "npc", content: m.content };
+          });
+
+        // 構建 scamHistory
+        let scamHistory: string | undefined;
+        if ((latestConv.scamCount ?? 0) > 0) {
+          const transfers = latestConv.messages
+            .filter((m: any) => m.meta?.decision === "agree" && m.meta?.amount)
+            .map((m: any) => `$${m.meta!.amount!.toLocaleString()}`);
+          scamHistory = `你之前已經轉過錢給這個陌生人，共 ${latestConv.scamCount} 次，總計 $${latestConv.totalPayout?.toLocaleString() ?? "不明"}。轉帳記錄：${transfers.join("、")}。`;
+        }
+
+        // 呼叫 AI
+        const data = await callAgnes({
+          sessionId: `${npc.id}-${latestConv.startedAt}`,
+          npc,
+          playerMessage: playerMsg,
+          currentDefense: latestConv.defense,
+          history: historyForAI,
+          consecutiveUrgent: latestConv.consecutiveUrgent,
+          consecutiveMoney: latestConv.consecutiveMoney,
+          turns: latestConv.turns,
+          scamHistory,
+        });
+
+        if (data.defenseDelta) {
+          updateDefense(npc.id, data.defenseDelta);
+        }
+
+        // 加入 NPC 回覆
+        appendMessage(npc.id, {
+          id: genId(),
+          role: "npc",
+          content: data.reply,
+          ts: Date.now(),
+          meta: { decision: data.decision },
+        });
+
+        // 如果 AI 同意轉帳
+        if (data.decision === "agree" && data.payoutAmount) {
+          const payoutAmount = data.payoutAmount;
+          appendMessage(npc.id, {
+            id: genId(),
+            role: "system",
+            content: `✓ ${npc.displayName} 已同意轉帳 $${payoutAmount.toLocaleString()}。款項已到帳。你可以繼續與對方對話。`,
+            ts: Date.now(),
+            meta: { decision: "agree", amount: payoutAmount },
+          });
+
+          // 加積分 + DRC + 防備值
+          const s2 = useGameStore.getState();
+          const scamCount = s2.conversations[npc.id]?.scamCount ?? 0;
+          updateDefense(npc.id, 10 + scamCount * 5);
+
+          useGameStore.setState((st: any) => ({
+            scamScore: st.scamScore + payoutAmount,
+            darkCoin: st.darkCoin + Math.floor(payoutAmount / 100),
+            conversations: {
+              ...st.conversations,
+              [npc.id]: {
+                ...st.conversations[npc.id],
+                scamCount: scamCount + 1,
+                totalPayout: (st.conversations[npc.id]?.totalPayout ?? 0) + payoutAmount,
+              },
+            },
+          }));
+
+          // 銀行簡訊
+          useGameStore.getState().addSms({
+            sender: "銀行系統",
+            subject: "【銀行】轉帳入帳通知",
+            body: `您的帳戶已收到 $${payoutAmount.toLocaleString()} 轉帳。來源：${npc.displayName}。餘額已更新。`,
+            type: "system",
+          });
+
+          flashToast(`✓ 自動對話成功！${npc.displayName} 轉帳 $${payoutAmount.toLocaleString()}`);
+          break;
+        }
+
+        // 如果被封鎖或警覺
+        if (data.decision === "block") {
+          appendMessage(npc.id, {
+            id: genId(),
+            role: "system",
+            content: `✗ ${npc.displayName} 已將你封鎖。對話終止。`,
+            ts: Date.now(),
+            meta: { decision: "block" },
+          });
+          appendMessage(npc.id, {
+            id: genId(),
+            role: "system",
+            content: "📊 點擊查看對話分析",
+            ts: Date.now() + 1,
+            meta: { decision: "block", showResult: true },
+          });
+          useGameStore.getState().setConversationStatus(npc.id, "blocked", undefined, data.endingReason);
+          flashToast(`✗ 自動對話失敗：${npc.displayName} 封鎖了你`);
+          break;
+        }
+
+        if (data.decision === "cautious") {
+          appendMessage(npc.id, {
+            id: genId(),
+            role: "system",
+            content: `⚠ ${npc.displayName} 不願再繼續討論這件事。對話結束。`,
+            ts: Date.now(),
+            meta: { decision: "cautious" },
+          });
+          appendMessage(npc.id, {
+            id: genId(),
+            role: "system",
+            content: "📊 點擊查看對話分析",
+            ts: Date.now() + 1,
+            meta: { decision: "cautious", showResult: true },
+          });
+          useGameStore.getState().setConversationStatus(npc.id, "cautious", undefined, data.endingReason);
+          flashToast(`⚠ 自動對話失敗：${npc.displayName} 警覺終止`);
+          break;
+        }
+
+        // 等待 1.5 秒再發下一條
+        await new Promise((r) => setTimeout(r, 1500));
+      }
+    } catch (e) {
+      flashToast(`自動對話出錯：${(e as Error).message?.slice(0, 50)}`);
+    } finally {
+      setAutoConversating(false);
+    }
+  };
+
   // 解鎖所有 NPC 情報
   const handleUnlockAll = () => {
     const allNpcs = getAllNpcs(generatedNpcs);
@@ -444,6 +642,17 @@ export function DebugFloatingButton() {
 
                 {/* 對話控制區 */}
                 <p className="text-[10px] font-semibold text-white/40 uppercase tracking-wide px-1 pt-2">對話控制（活躍對話）</p>
+
+                {/* 一鍵自動對話 */}
+                <button
+                  onClick={handleAutoConversation}
+                  disabled={autoConversating}
+                  className="w-full py-2.5 rounded-lg text-[11px] font-bold active:scale-95 transition flex items-center justify-center gap-1.5 disabled:opacity-60"
+                  style={{ background: "rgba(88,86,214,0.15)", color: "#5856d6", border: "1px solid rgba(88,86,214,0.3)" }}
+                >
+                  <MessageCircle className="w-3.5 h-3.5" />
+                  {autoConversating ? "自動對話中..." : "一鍵自動對話詐騙"}
+                </button>
 
                 <div className="grid grid-cols-3 gap-1.5">
                   <button

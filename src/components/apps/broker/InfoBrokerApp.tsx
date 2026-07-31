@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Lock, CheckCircle2, Eye, Skull, Fingerprint, Copy, Check, Coins, ChevronUp, Zap, TrendingUp, RefreshCw, Sparkles } from "lucide-react";
+import { Lock, CheckCircle2, Eye, Skull, Fingerprint, Copy, Check, Coins, ChevronUp, Zap, RefreshCw, Sparkles } from "lucide-react";
 import { useGameStore } from "@/lib/game/store";
 import { NPCS, getAllNpcs, type NpcProfile } from "@/lib/game/npcs";
 import { generateRandomNpcs } from "@/lib/game/randomNpc";
@@ -14,9 +14,6 @@ export function InfoBrokerApp({ onBack }: { onBack: () => void }) {
   const premiumNpcIds = useGameStore((s) => s.premiumNpcIds);
   const conversations = useGameStore((s) => s.conversations);
   const purchaseIntel = useGameStore((s) => s.purchaseIntel);
-  const convertScamToCoin = useGameStore((s) => s.convertScamToCoin);
-  const scamScore = useGameStore((s) => s.scamScore);
-  const convertedAmount = useGameStore((s) => s.convertedAmount);
   const addTraffic = useGameStore((s) => s.addTraffic);
   const dataTraffic = useGameStore((s) => s.dataTraffic);
   const generatedNpcs = useGameStore((s) => s.generatedNpcs);
@@ -93,7 +90,6 @@ export function InfoBrokerApp({ onBack }: { onBack: () => void }) {
     }, 600);
   };
 
-  const convertibleCoin = Math.floor((scamScore - convertedAmount) / 1000) * 10;
 
   const cardBg = "var(--im-bubble-npc-bg)";
   const cardBorder = "var(--im-header-border)";
@@ -179,21 +175,6 @@ export function InfoBrokerApp({ onBack }: { onBack: () => void }) {
                   </div>
                 </div>
                 <span className="text-xs font-bold" style={{ color: "#bf5af2" }}>30 DRC</span>
-              </button>
-              <button
-                onClick={() => { convertScamToCoin(); }}
-                disabled={convertibleCoin <= 0}
-                className="w-full flex items-center justify-between p-2.5 rounded-lg active:scale-95 transition disabled:opacity-40"
-                style={{ background: cardBg }}
-              >
-                <div className="flex items-center gap-2">
-                  <TrendingUp className="w-4 h-4" style={{ color: "#34c759" }} />
-                  <div className="text-left">
-                    <p className="text-xs font-medium" style={{ color: textMain }}>洗錢兌換（$1000 → 10 DRC）</p>
-                    <p className="text-[10px]" style={{ color: textSub }}>可兌換 {convertibleCoin} DRC</p>
-                  </div>
-                </div>
-                <span className="text-xs font-bold" style={{ color: "#34c759" }}>兌換</span>
               </button>
             </div>
           </motion.div>

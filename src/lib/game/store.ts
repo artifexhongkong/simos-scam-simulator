@@ -102,7 +102,8 @@ export interface GameState {
   consumeTraffic: (n: number) => boolean;
   addTraffic: (n: number) => void;
   adjustRisk: (delta: number) => void;
-  convertScamToCoin: () => void; // 詐騙金額兌換暗網幣
+  convertScamToCoin: () => void; // 詐騙金額兌換暗網幣（全額，保留相容）
+  convertPartial: (amount: number, rate?: number) => { ok: boolean; error?: string; drcGained?: number }; // 部分兌換（可指定匯率）
   purchaseIntel: (npcId: string, premium: boolean) => boolean;
   addFriend: (telechatId: string) => { ok: boolean; error?: string; npcId?: string };
   startConversation: (npcId: string) => void;
@@ -292,6 +293,23 @@ export const useGameStore = create<GameState>()(
           darkCoin: s.darkCoin + convertibleDRC,
           convertedAmount: newConverted,
         });
+      },
+
+      // 部分兌換：玩家指定金額，按指定匯率兌換
+      convertPartial: (amount, rate) => {
+        const s = get();
+        const unconverted = s.scamScore - s.convertedAmount;
+        if (amount <= 0) return { ok: false, error: "請輸入有效金額" };
+        if (amount > unconverted) return { ok: false, error: `可用金額不足（最多 $${unconverted.toLocaleString()}）` };
+        // 匯率：每 $100 → rate DRC（預設 1.0）
+        const actualRate = rate ?? 1.0;
+        const drcGained = Math.floor(amount * actualRate / 100);
+        if (drcGained <= 0) return { ok: false, error: "金額太低，最少需 $100" };
+        set({
+          darkCoin: s.darkCoin + drcGained,
+          convertedAmount: s.convertedAmount + amount,
+        });
+        return { ok: true, drcGained };
       },
 
       purchaseIntel: (npcId, premium) => {

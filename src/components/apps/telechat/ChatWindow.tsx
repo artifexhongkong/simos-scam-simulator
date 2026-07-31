@@ -174,6 +174,9 @@ export function ChatWindow({ npc, onBack }: { npc: NpcProfile; onBack: () => voi
     }
 
     setInput("");
+    if (inputRef.current) {
+      inputRef.current.style.height = "32px";
+    }
     setShowQuickPhrases(false);
     setShowImageMaterials(false);
     setThinking(true);
@@ -276,8 +279,8 @@ export function ChatWindow({ npc, onBack }: { npc: NpcProfile; onBack: () => voi
         const updatedConv2 = useGameStore.getState().conversations[npc.id];
         if (updatedConv2) {
           const scamCount = updatedConv2.scamCount ?? 0;
-          // 每次成功詐騙後防備值 +20（越來越難）
-          const defenseIncrease = 20 + scamCount * 10;
+          // 每次成功詐騙後防備值小幅提升（讓後續詐騙更難但不至於不可能）
+          const defenseIncrease = 10 + scamCount * 5;
           updateDefense(npc.id, defenseIncrease);
           // 記錄詐騙次數
           useGameStore.setState((s) => ({
@@ -668,17 +671,23 @@ export function ChatWindow({ npc, onBack }: { npc: NpcProfile; onBack: () => voi
               <textarea
                 ref={inputRef}
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
+                onChange={(e) => {
+                  setInput(e.target.value);
+                  // 自動調整高度（最多 5 行）
+                  e.target.style.height = "auto";
+                  e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px";
+                }}
                 onKeyDown={handleKeyDown}
                 onFocus={handleInputFocus}
                 onClick={handleInputFocus}
                 placeholder="iMessage"
                 rows={1}
                 disabled={thinking}
-                className="flex-1 max-h-24 resize-none bg-transparent px-3 py-1.5 text-[16px] leading-[20px] focus:outline-none disabled:opacity-50"
+                className="flex-1 resize-none bg-transparent px-3 py-1.5 text-[16px] leading-[20px] focus:outline-none disabled:opacity-50 overflow-y-auto"
                 style={{
                   color: "var(--im-input-text)",
                   minHeight: "32px",
+                  maxHeight: "120px",
                 }}
               />
               {/* 快捷话术按鈕（輸入框空白時顯示） */}

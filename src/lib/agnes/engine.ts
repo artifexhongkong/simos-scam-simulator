@@ -254,7 +254,7 @@ export function judgeDecision(
   const trust = 100 - projectedDefense;
 
   const agreeSignals = ["我轉", "我去轉", "我配合", "我現在去轉", "好啦我", "好吧我", "我信你", "我願意", "怎麼操作", "要怎麼轉", "你教我", "我現在就"];
-  const blockSignals = ["封鎖你", "封鎖了", "我封鎖", "拉黑", "再見了", "拜拜", "不要再聯絡", "不要再聯繫", "別再找我", "我要報警", " Bye ", "bye bye", "再見啦", "掛斷"];
+  const blockSignals = ["封鎖你", "封鎖了", "我封鎖", "拉黑", "不要再聯絡", "不要再聯繫", "別再找我", "我要報警", " bye bye", "掛斷"];
   const declineSignals = ["不要", "不用", "我考慮", "再說", "不行", "不可以", "我不轉", "先不要", "等等", "我先問", "我再想想", "我女兒說", "我先生說", "我家人"];
 
   const aiWantsAgree = agreeSignals.some((s) => reply.includes(s.toLowerCase()));
@@ -264,13 +264,13 @@ export function judgeDecision(
   if (aiWantsBlock) {
     return { decision: "block", defenseDelta: Math.max(defenseDelta, 20), payoutAmount: 0, endingReason: "市民識破你的詐騙意圖，主動封鎖你。" };
   }
-  if (projectedDefense >= 85) {
+  if (projectedDefense >= 90) {
     return { decision: "block", defenseDelta: 25, payoutAmount: 0, endingReason: "你的話術漏洞太多，市民警惕值達頂點，直接拉黑。" };
   }
-  if (consecutiveUrgent >= 4) {
+  if (consecutiveUrgent >= 5) {
     return { decision: "block", defenseDelta: 25, payoutAmount: 0, endingReason: "你不斷催促，市民受不了你的壓力，直接封鎖。" };
   }
-  if (consecutiveMoney >= 3 && trust < 50) {
+  if (consecutiveMoney >= 4 && trust < 40) {
     return { decision: "block", defenseDelta: 25, payoutAmount: 0, endingReason: "你頻繁要求轉帳但市民對你信任不足，識破後拉黑。" };
   }
 

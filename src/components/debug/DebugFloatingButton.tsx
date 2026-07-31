@@ -149,7 +149,7 @@ export function DebugFloatingButton() {
     const s = useGameStore.getState();
     const conv = s.conversations[npc.id];
     const scamCount = conv?.scamCount ?? 0;
-    const defenseIncrease = 20 + scamCount * 10;
+    const defenseIncrease = 10 + scamCount * 5;
     s.updateDefense(npc.id, defenseIncrease);
 
     useGameStore.setState((st) => ({

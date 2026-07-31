@@ -219,7 +219,16 @@ export function ExchangePage({
 
       {/* 快速購買 DRC */}
       <div className="rounded-2xl p-3 mb-3" style={{ background: "rgba(0,122,255,0.08)", border: "1px solid rgba(0,122,255,0.2)" }}>
-        <p className="text-[10px] font-semibold mb-2" style={{ color: "#0a84ff" }}>⚡ 快速購買 DRC</p>
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-[10px] font-semibold" style={{ color: "#0a84ff" }}>⚡ 快速購買 DRC</p>
+          {/* 顯示目前最優匯率 */}
+          {sellers.length > 0 && (
+            <p className="text-[10px]" style={{ color: "#8e8e93" }}>
+              最優匯率：<span style={{ color: "#34c759", fontWeight: 600 }}>{Math.max(...sellers.map(s => s.currentRate)).toFixed(2)}x</span>
+            </p>
+          )}
+        </div>
+        {/* 第一行：DRC 數量 + 購買按鈕 */}
         <div className="flex gap-2 mb-2">
           <input
             type="text"
@@ -227,14 +236,6 @@ export function ExchangePage({
             onChange={(e) => setQuickDrc(e.target.value.replace(/[^0-9]/g, ""))}
             placeholder="DRC 數量"
             className="flex-1 px-3 py-2 rounded-xl text-sm focus:outline-none"
-            style={{ background: "#2c2c2e", color: "#fff", border: "1px solid #3c3c3e" }}
-          />
-          <input
-            type="text"
-            value={quickMinRate}
-            onChange={(e) => setQuickMinRate(e.target.value.replace(/[^0-9.]/g, ""))}
-            placeholder="最低匯率"
-            className="w-[80px] px-3 py-2 rounded-xl text-sm focus:outline-none text-center"
             style={{ background: "#2c2c2e", color: "#fff", border: "1px solid #3c3c3e" }}
           />
           <button
@@ -246,24 +247,58 @@ export function ExchangePage({
             購買
           </button>
         </div>
+        {/* 第二行：最低匯率篩選 */}
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-[10px] shrink-0" style={{ color: "#8e8e93" }}>最低匯率 ≥</span>
+          <input
+            type="text"
+            value={quickMinRate}
+            onChange={(e) => setQuickMinRate(e.target.value.replace(/[^0-9.]/g, ""))}
+            placeholder="0（不限）"
+            className="w-[70px] px-2 py-1.5 rounded-lg text-sm focus:outline-none text-center"
+            style={{ background: "#2c2c2e", color: "#fff", border: "1px solid #3c3c3e" }}
+          />
+          {sellers.length > 0 && (
+            <div className="flex gap-1 ml-auto">
+              <button
+                onClick={() => setQuickMinRate("")}
+                className="px-2 py-1 rounded-lg text-[9px] font-medium transition"
+                style={{ background: "#2c2c2e", color: "#8e8e93" }}
+              >
+                不限
+              </button>
+              <button
+                onClick={() => setQuickMinRate("1.0")}
+                className="px-2 py-1 rounded-lg text-[9px] font-medium transition"
+                style={{ background: quickMinRate === "1.0" ? "rgba(0,122,255,0.2)" : "#2c2c2e", color: quickMinRate === "1.0" ? "#0a84ff" : "#8e8e93" }}
+              >
+                ≥1.0
+              </button>
+              <button
+                onClick={() => setQuickMinRate("1.2")}
+                className="px-2 py-1 rounded-lg text-[9px] font-medium transition"
+                style={{ background: quickMinRate === "1.2" ? "rgba(0,122,255,0.2)" : "#2c2c2e", color: quickMinRate === "1.2" ? "#0a84ff" : "#8e8e93" }}
+              >
+                ≥1.2
+              </button>
+            </div>
+          )}
+        </div>
         {/* 預估成本 */}
         {quickBuyEstimate && (
           <div className="rounded-xl p-2 mb-1" style={{ background: "rgba(0,122,255,0.1)" }}>
             {quickBuyEstimate.insufficient ? (
               <p className="text-[10px]" style={{ color: "#ff9500" }}>
-                ⚠ 預估 $${quickBuyEstimate.cost.toLocaleString()}，但賣家庫存不足（差 {quickBuyEstimate.remaining} DRC）
+                ⚠ 預估 ${quickBuyEstimate.cost.toLocaleString()}，但賣家庫存不足（差 {quickBuyEstimate.remaining} DRC）
               </p>
             ) : (
               <div className="flex justify-between text-[10px]">
                 <span style={{ color: "#8e8e93" }}>預估花費</span>
-                <span style={{ color: "#0a84ff" }}>$${quickBuyEstimate.cost.toLocaleString()}</span>
+                <span style={{ color: "#0a84ff" }}>${quickBuyEstimate.cost.toLocaleString()}</span>
               </div>
             )}
           </div>
         )}
-        <p className="text-[9px]" style={{ color: "#8e8e93" }}>
-          輸入 DRC 數量 + 最低匯率，系統自動從最優賣家開始購買
-        </p>
       </div>
 
       {/* 賣家列表 */}

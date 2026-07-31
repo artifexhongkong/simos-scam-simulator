@@ -20,6 +20,7 @@ import {
   Coins,
 } from "lucide-react";
 import { useGameStore } from "@/lib/game/store";
+import { ExchangePage } from "./ExchangePage";
 
 type Page = "home" | "phone-shop" | "exchange";
 
@@ -139,20 +140,8 @@ export function DarkNetApp({ onBack }: { onBack: () => void }) {
             scamScore={scamScore}
             convertedAmount={convertedAmount}
             darkCoin={darkCoin}
-            onExchange={(amount, rate) => {
-              const result = convertPartial(amount, rate);
-              if (result.ok) {
-                setShowPurchaseResult({
-                  ok: true,
-                  msg: `兌換成功！$${amount.toLocaleString()} → ${result.drcGained} DRC`,
-                });
-              } else {
-                setShowPurchaseResult({
-                  ok: false,
-                  msg: result.error || "兌換失敗",
-                });
-              }
-              setTimeout(() => setShowPurchaseResult(null), 4000);
+            onExchange={(amount, rate, sellerId) => {
+              return convertPartial(amount, rate);
             }}
           />
         )}
@@ -238,8 +227,8 @@ function HomePage({
     },
     {
       id: "exchange",
-      title: "洗錢交易中心",
-      desc: "將詐騙所得兌換為 DRC，多個洗錢中間商可選",
+      title: "暗網外匯",
+      desc: "將詐騙所得兌換為 DRC，多名賣家可選",
       icon: <TrendingUp className="w-5 h-5" />,
       color: "#34c759",
       url: "darknet://exchange",
@@ -642,232 +631,5 @@ function AdModal({
         )}
       </div>
     </motion.div>
-  );
-}
-
-// === 洗錢交易中心頁面 ===
-// 多個洗錢中間商，不同匯率，玩家自選金額兌換
-
-interface MoneyLaunderer {
-  id: string;
-  name: string;
-  avatar: string;
-  rate: number; // 匯率：每 $100 → rate DRC
-  desc: string;
-  minAmount: number;
-  maxPercent: number; // 最多可兌換可用金額的百分比
-}
-
-const LAUNDERERS: MoneyLaunderer[] = [
-  {
-    id: "lao_wang",
-    name: "老王",
-    avatar: "🧓",
-    rate: 0.8, // 每 $100 → 0.8 DRC（匯率差）
-    desc: "老實人，匯率低但穩定可靠，不會捲款",
-    minAmount: 100,
-    maxPercent: 1.0,
-  },
-  {
-    id: "snake",
-    name: "蛇頭",
-    avatar: "🐍",
-    rate: 1.0, // 標準匯率
-    desc: "地下錢莊龍頭，匯率合理，量大從優",
-    minAmount: 500,
-    maxPercent: 0.8,
-  },
-  {
-    id: "ghost",
-    name: "鬼影",
-    avatar: "👻",
-    rate: 1.5, // 高匯率但有風險
-    desc: "神秘中間商，匯率最高但只收大單，有跑路風險",
-    minAmount: 5000,
-    maxPercent: 0.5,
-  },
-  {
-    id: "crypto_bro",
-    name: "加密哥",
-    avatar: "🤖",
-    rate: 1.2,
-    desc: "用加密貨幣洗錢，匯率不錯，到帳快",
-    minAmount: 1000,
-    maxPercent: 0.9,
-  },
-];
-
-function ExchangePage({
-  scamScore,
-  convertedAmount,
-  darkCoin,
-  onExchange,
-}: {
-  scamScore: number;
-  convertedAmount: number;
-  darkCoin: number;
-  onExchange: (amount: number, rate: number) => void;
-}) {
-  const available = scamScore - convertedAmount;
-  const [selectedLaunderer, setSelectedLaunderer] = useState<MoneyLaunderer | null>(null);
-  const [inputAmount, setInputAmount] = useState("");
-
-  const handleExchange = () => {
-    if (!selectedLaunderer) return;
-    const amount = parseInt(inputAmount.replace(/,/g, ""), 10);
-    if (isNaN(amount) || amount <= 0) return;
-
-    const maxAllowed = Math.floor(available * selectedLaunderer.maxPercent);
-    const actualAmount = Math.min(amount, maxAllowed);
-    if (actualAmount < selectedLaunderer.minAmount) return;
-
-    onExchange(actualAmount, selectedLaunderer.rate);
-    setInputAmount("");
-    setSelectedLaunderer(null);
-  };
-
-  return (
-    <div className="p-4">
-      {/* 標題 */}
-      <div className="text-center py-4">
-        <div
-          className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-2"
-          style={{ background: "rgba(52,199,89,0.1)" }}
-        >
-          <TrendingUp className="w-7 h-7" style={{ color: "#34c759" }} />
-        </div>
-        <h2 className="text-lg font-bold mb-1" style={{ color: "#fff" }}>洗錢交易中心</h2>
-        <p className="text-[11px]" style={{ color: "#8e8e93" }}>選擇中間商，自訂金額兌換 DRC</p>
-      </div>
-
-      {/* 餘額顯示 */}
-      <div className="rounded-2xl p-4 mb-4" style={{ background: "#1c1c1e", border: "1px solid #2c2c2e" }}>
-        <div className="flex justify-between mb-2">
-          <span className="text-[12px]" style={{ color: "#8e8e93" }}>可用金額</span>
-          <span className="text-[14px] font-bold" style={{ color: "#34c759" }}>${available.toLocaleString()}</span>
-        </div>
-        <div className="flex justify-between mb-2">
-          <span className="text-[12px]" style={{ color: "#8e8e93" }}>已兌換</span>
-          <span className="text-[12px]" style={{ color: "#8e8e93" }}>${convertedAmount.toLocaleString()}</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-[12px]" style={{ color: "#8e8e93" }}>DRC 餘額</span>
-          <span className="text-[12px] font-bold" style={{ color: "#bf5af2" }}>{darkCoin} DRC</span>
-        </div>
-      </div>
-
-      {/* 中間商列表 */}
-      <p className="text-[10px] font-semibold uppercase tracking-wide mb-2 px-1" style={{ color: "#48484a" }}>
-        洗錢中間商
-      </p>
-
-      <div className="space-y-2 mb-4">
-        {LAUNDERERS.map((launderer) => {
-          const maxAllowed = Math.floor(available * launderer.maxPercent);
-          const canUse = available >= launderer.minAmount && maxAllowed > 0;
-          const isSelected = selectedLaunderer?.id === launderer.id;
-          return (
-            <button
-              key={launderer.id}
-              onClick={() => canUse ? setSelectedLaunderer(launderer) : null}
-              disabled={!canUse}
-              className="w-full rounded-2xl p-3.5 flex items-center gap-3 transition active:scale-[0.98] disabled:opacity-30"
-              style={{
-                background: isSelected ? "rgba(52,199,89,0.1)" : "#1c1c1e",
-                border: isSelected ? "1px solid rgba(52,199,89,0.4)" : "1px solid #2c2c2e",
-              }}
-            >
-              <div className="w-11 h-11 rounded-xl flex items-center justify-center text-2xl shrink-0" style={{ background: "#2c2c2e" }}>
-                {launderer.avatar}
-              </div>
-              <div className="flex-1 text-left min-w-0">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-semibold" style={{ color: "#fff" }}>{launderer.name}</h3>
-                  <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold" style={{ background: "rgba(52,199,89,0.15)", color: "#34c759" }}>
-                    {launderer.rate}x
-                  </span>
-                </div>
-                <p className="text-[11px] mt-0.5" style={{ color: "#8e8e93" }}>{launderer.desc}</p>
-                <p className="text-[10px] mt-0.5" style={{ color: "#48484a" }}>
-                  最低 ${launderer.minAmount.toLocaleString()} ・ 最多兌 {Math.floor(launderer.maxPercent * 100)}%
-                </p>
-              </div>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* 兌換輸入 */}
-      {selectedLaunderer && (
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="rounded-2xl p-4 mb-4"
-          style={{ background: "rgba(52,199,89,0.05)", border: "1px solid rgba(52,199,89,0.2)" }}
-        >
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <h3 className="text-sm font-bold" style={{ color: "#34c759" }}>
-                {selectedLaunderer.avatar} {selectedLaunderer.name}
-              </h3>
-              <p className="text-[10px]" style={{ color: "#8e8e93" }}>
-                匯率：每 $100 → {selectedLaunderer.rate} DRC
-              </p>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <span className="text-[12px]" style={{ color: "#8e8e93" }}>$</span>
-              <input
-                type="text"
-                value={inputAmount}
-                onChange={(e) => {
-                  const val = e.target.value.replace(/[^0-9]/g, "");
-                  setInputAmount(val);
-                }}
-                placeholder={`輸入金額（最低 ${selectedLaunderer.minAmount.toLocaleString()}）`}
-                className="flex-1 px-3 py-2.5 rounded-xl text-sm focus:outline-none"
-                style={{ background: "#2c2c2e", color: "#fff", border: "1px solid #3c3c3e" }}
-              />
-            </div>
-
-            {inputAmount && (
-              <div className="flex justify-between text-[11px]" style={{ color: "#8e8e93" }}>
-                <span>可獲得</span>
-                <span style={{ color: "#bf5af2" }}>
-                  {Math.floor(parseInt(inputAmount || "0") * selectedLaunderer.rate / 100)} DRC
-                </span>
-              </div>
-            )}
-
-            <div className="flex gap-2">
-              <button
-                onClick={() => { setSelectedLaunderer(null); setInputAmount(""); }}
-                className="flex-1 py-2.5 rounded-xl text-sm font-medium active:scale-95 transition"
-                style={{ background: "#2c2c2e", color: "#8e8e93" }}
-              >
-                取消
-              </button>
-              <button
-                onClick={handleExchange}
-                disabled={!inputAmount || parseInt(inputAmount) < selectedLaunderer.minAmount}
-                className="flex-1 py-2.5 rounded-xl text-sm font-bold active:scale-95 transition disabled:opacity-40"
-                style={{ background: "#34c759", color: "#fff" }}
-              >
-                確認兌換
-              </button>
-            </div>
-          </div>
-        </motion.div>
-      )}
-
-      {/* 說明 */}
-      <div className="rounded-2xl p-3" style={{ background: "rgba(52,199,89,0.05)", border: "1px solid rgba(52,199,89,0.15)" }}>
-        <p className="text-[10px] leading-relaxed" style={{ color: "#8e8e93" }}>
-          💡 不同中間商提供不同匯率和限制。匯率越高收益越大，但可能有最低金額或百分比限制。選擇適合你的中間商。
-        </p>
-      </div>
-    </div>
   );
 }

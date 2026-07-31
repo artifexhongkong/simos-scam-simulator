@@ -198,12 +198,22 @@ export function ChatWindow({ npc, onBack }: { npc: NpcProfile; onBack: () => voi
     updateConversationMetrics(npc.id, isUrgent, isMoney);
 
     const currentMessages = latestConv.messages;
+    // 構建 AI 歷史：保留系統訊息（轉為 NPC 內心獨白），讓 NPC 記得轉過錢
     const historyForAI = currentMessages
-      .filter((m) => m.role === "player" || m.role === "npc")
-      .map((m) => ({
-        role: m.role === "player" ? ("player" as const) : ("npc" as const),
-        content: m.content,
-      }));
+      .filter((m) => m.role === "player" || m.role === "npc" || (m.role === "system" && m.meta?.decision === "agree"))
+      .map((m) => {
+        if (m.role === "system" && m.meta?.decision === "agree" && m.meta?.amount) {
+          // 將轉帳系統訊息轉為 NPC 的「記憶」訊息
+          return {
+            role: "npc" as const,
+            content: `（我記得我已經轉了 $${m.meta!.amount!.toLocaleString()} 給這個人）`,
+          };
+        }
+        return {
+          role: (m.role === "player" ? "player" : "npc") as "player" | "npc",
+          content: m.content,
+        };
+      });
 
     // 重新讀取更新後的 conv（含最新 metrics）
     const updatedConv = useGameStore.getState().conversations[npc.id];

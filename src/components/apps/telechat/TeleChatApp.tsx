@@ -416,7 +416,7 @@ function AddFriendScreen({
         <div className="mt-auto">
           <button
             onClick={submit}
-            disabled={!tid || loading}
+            disabled={!tid.trim() || loading}
             className="w-full py-3 rounded-xl bg-blue-600 text-white font-semibold text-sm hover:bg-blue-500 active:scale-95 transition disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {loading ? "搜尋中..." : "加入好友"}

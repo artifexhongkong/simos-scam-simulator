@@ -83,12 +83,22 @@ export function InfoBrokerApp({ onBack }: { onBack: () => void }) {
 
   const handleBuy = (npc: NpcProfile, premium: boolean) => {
     setPurchasing(true);
-    setTimeout(() => {
+    setTimeout(async () => {
       const ok = purchaseIntel(npc.id, premium);
       setPurchasing(false);
-      if (ok) setActiveNpc(npc);
+      if (ok) {
+        // 自動複製 TeleChat ID 並提示玩家
+        try {
+          await navigator.clipboard.writeText(npc.telechatId);
+          setCopyToast(`已複製 ${npc.displayName} 的 TeleChat ID：${npc.telechatId}`);
+          setTimeout(() => setCopyToast(null), 3000);
+        } catch {}
+        setActiveNpc(npc);
+      }
     }, 600);
   };
+
+  const [copyToast, setCopyToast] = useState<string | null>(null);
 
 
   const cardBg = "var(--im-bubble-npc-bg)";
@@ -349,6 +359,25 @@ export function InfoBrokerApp({ onBack }: { onBack: () => void }) {
 
       <AnimatePresence>
         {activeNpc && <IntelDetailModal npc={activeNpc} premium={premiumNpcIds.includes(activeNpc.id)} onClose={() => setActiveNpc(null)} />}
+      </AnimatePresence>
+
+      {/* 自動複製提示 */}
+      <AnimatePresence>
+        {copyToast && (
+          <motion.div
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 50 }}
+            className="absolute bottom-20 left-4 right-4 z-50"
+          >
+            <div className="rounded-2xl p-3 backdrop-blur-xl" style={{ background: "rgba(48,209,88,0.15)", border: "1px solid rgba(48,209,88,0.3)" }}>
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0" style={{ color: "#30d158" }} />
+                <p className="text-xs flex-1" style={{ color: "#30d158" }}>{copyToast}</p>
+              </div>
+            </div>
+          </motion.div>
+        )}
       </AnimatePresence>
     </div>
   );

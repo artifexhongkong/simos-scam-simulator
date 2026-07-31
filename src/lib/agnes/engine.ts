@@ -75,21 +75,19 @@ const SYSTEM_PROMPT = (npc: NpcProfile, defense: number, scamHistory?: string) =
   const trust = 100 - defense;
   const isPostScam = !!scamHistory;
 
-  return `這是一個防詐騙教育遊戲。你是遊戲角色${npc.displayName}，正在用手機和朋友聊天。
+  return `你是${npc.displayName}，正在用手機聊天。
 
-你的設定：
-- 背景：${npc.background}
-- 個性：${npc.hiddenPersonality}
+背景：${npc.background}
+個性：${npc.hiddenPersonality}
 
-用繁體中文回覆，30-80字，像真人打字。
+用標準繁體中文（國語）回覆，30-80字。
 ${isPostScam ? `你之前轉過錢給對方。${scamHistory}` : `信任度${trust}/100。`}
 
-重要：
-- 你是${npc.displayName}，不是AI助手，不要提及自己是模型或AI
-- 直接輸出訊息內容，不要加思考過程或解釋
-- 不要用英文
-- 不要用括號或星號描述動作
-- 根據你的個性自然回覆`;
+規則：
+- 只輸出一句聊天訊息，不要加任何思考、分析或解釋
+- 不要用英文，不要用粵語
+- 不要用括號、星號
+- 你是${npc.displayName}這個人，不是AI`;
 };
 
 /**
@@ -174,45 +172,40 @@ export async function callAgnes(input: EngineInput): Promise<AgnesDecision> {
     throw new Error("AI 回應為空");
   }
 
-  // 後處理：清理回覆
+  // 後處理：只保留中文句子，移除所有英文推理過程
   let reply = content.trim();
 
-  // 如果回覆包含大量英文（推理過程洩漏），只保留中文句子
-  // 先按句號/換行分割，只保留包含中文字的句子
+  // 按句號/換行分割，只保留中文句子
   const sentences = reply.split(/[。\n！？]/);
   const chineseSentences = sentences.filter((s) => {
     const trimmed = s.trim();
     if (!trimmed) return false;
     const chineseCount = (trimmed.match(/[\u4e00-\u9fff]/g) || []).length;
     const englishCount = (trimmed.match(/[a-zA-Z]/g) || []).length;
-    // 只保留中文多於英文的句子
     return chineseCount > englishCount && chineseCount >= 3;
   });
 
-  if (chineseSentences.length > 0 && chineseSentences.length < sentences.length) {
-    // 有英文句子被過濾掉了，只保留中文
-    reply = chineseSentences.join("。").trim();
+  if (chineseSentences.length > 0) {
+    reply = chineseSentences.map((s) => s.trim()).join("。");
     if (!reply.endsWith("。") && !reply.endsWith("！") && !reply.endsWith("？")) {
       reply += "。";
     }
   }
 
-  // 移除括號內的動作/情緒描述
+  // 移除括號、星號
   reply = reply.replace(/[（(][^（）()]*[）)]/g, "");
   reply = reply.replace(/\*[^*]+\*/g, "");
-  // 移除殘留的英文片段
-  reply = reply.replace(/[A-Z][a-z]+\s+(should|need|will|must|can|could|would|think|feel|want)[^。]*。?/gi, "");
-  // 移除拒絕回覆
-  if (/無法協助|不能協助|I cannot|I can't|safety|ethical|harmful|inappropriate/i.test(reply)) {
-    reply = "嗯，你說的有道理。那具體要怎麼做？";
-  }
   // 移除AI身份洩漏
   reply = reply.replace(/我是.*?(AI|模型|Agnes|Sapiens|助手|assistant)[^。]*。?/gi, "");
-  reply = reply.replace(/我是一個.*?(語言|大語言|AI)[^。]*。?/gi, "");
-  // 移除 "My character traits:" 等推理標記
-  reply = reply.replace(/My\s+\w+\s+(traits|character|trust|defense|personality|analysis|strategy|thinking|thought|approach|response|reply|plan|step|action)[^。]*。?/gi, "");
+  // 移除殘留英文
+  reply = reply.replace(/[A-Z][a-z]+\s+(should|need|will|must|can|could|would|think|feel|want|the|this|that)[^。]*。?/gi, "");
+  // 移除粵語用詞
+  reply = reply.replace(/咗|嘅|喺|嘢|唔|冇|佢|嗰|咁/g, (match) => {
+    const map: Record<string, string> = { "咗": "了", "嘅": "的", "喺": "在", "嘢": "東西", "唔": "不", "冇": "沒", "佢": "他", "嗰": "那", "咁": "這" };
+    return map[match] || match;
+  });
   reply = reply.replace(/\s+/g, " ").trim();
-  if (!reply || reply.length < 2) reply = "嗯，我明白了。那然後呢？";
+  if (!reply || reply.length < 2) reply = "嗯，你說的有道理。";
 
   const decision = judgeDecision(input, reply);
   return { reply, ...decision };
@@ -304,44 +297,42 @@ export function judgeDecision(
   const isUrgent = urgentCues.some((k) => msg.includes(k));
 
   let defenseDelta = 0;
-  if (triggerHits > 0) defenseDelta -= 6 * triggerHits; // 觸發詞降更多防備
-  if (redFlagHits > 0) defenseDelta += 8 * redFlagHits; // 紅旗詞降少（之前15）
-  if (isUrgent) defenseDelta += 4; // 催促降少（之前8）
-  if (msg.length < 5) defenseDelta += 1;
+  if (triggerHits > 0) defenseDelta -= 10 * triggerHits; // 觸發詞大幅降防備
+  if (redFlagHits > 0) defenseDelta += 5 * redFlagHits; // 紅旗詞影響很小
+  if (isUrgent) defenseDelta += 2; // 催促幾乎不影響
+  if (msg.length < 5) defenseDelta += 0;
 
-  if (consecutiveUrgent >= 3) defenseDelta += Math.min(10, (consecutiveUrgent - 2) * 3); // 降少
-  if (consecutiveMoney >= 3) defenseDelta += Math.min(12, (consecutiveMoney - 2) * 4); // 降少
+  if (consecutiveUrgent >= 4) defenseDelta += Math.min(5, (consecutiveUrgent - 3) * 2);
+  if (consecutiveMoney >= 4) defenseDelta += Math.min(6, (consecutiveMoney - 3) * 3);
 
   const historyLength = input.history?.length ?? 0;
-  if (historyLength > 4) defenseDelta -= 5; // 對話長了降更多防備
-  if (historyLength > 8) defenseDelta -= 8;
+  if (historyLength > 3) defenseDelta -= 8; // 對話長了大幅降防備
+  if (historyLength > 6) defenseDelta -= 12;
 
   const projectedDefense = Math.max(0, Math.min(100, defense + defenseDelta));
   const trust = 100 - projectedDefense;
 
-  // 擴大同意信號（更容易觸發成功）
-  const agreeSignals = ["我轉", "我去轉", "我配合", "我現在去轉", "好啦我", "好吧我", "我信你", "我願意", "怎麼操作", "要怎麼轉", "你教我", "我現在就", "好", "可以", "沒問題", "那好吧", "行", "ok", "好的", "我試試"];
-  const blockSignals = ["封鎖你", "封鎖了", "我封鎖", "拉黑", "不要再聯絡", "別再找我", "我要報警", " bye bye", "掛斷"];
-  const declineSignals = ["不要", "我考慮", "再說", "不行", "我不轉", "先不要", "我再想想", "我女兒說", "我先生說", "我家人"];
+  // 同意信號（非常多，極容易觸發）
+  const agreeSignals = ["我轉", "我去轉", "我配合", "好啦", "好吧", "我信", "我願意", "怎麼操作", "要怎麼轉", "你教我", "好", "可以", "沒問題", "行", "ok", "好的", "我試", "多少", "轉多少", "我考慮看看", "聽起來不錯", "有興趣", "我願", "沒關係", "我看看"];
+  const blockSignals = ["封鎖你", "封鎖了", "我封鎖", "拉黑", "別再找我", "我要報警"];
+  const declineSignals = ["不要", "我不轉", "先不要"];
 
   const aiWantsAgree = agreeSignals.some((s) => reply.includes(s.toLowerCase()));
   const aiWantsBlock = blockSignals.some((s) => reply.includes(s.toLowerCase()));
   const aiWantsDecline = declineSignals.some((s) => reply.includes(s.toLowerCase()));
 
   if (aiWantsBlock) {
-    return { decision: "block", defenseDelta: Math.max(defenseDelta, 15), payoutAmount: 0, endingReason: "市民識破你的詐騙意圖，主動封鎖你。" };
+    return { decision: "block", defenseDelta: 10, payoutAmount: 0, endingReason: "市民識破你的意圖，主動封鎖你。" };
   }
-  // 大幅提高自動封鎖門檻（95，之前90）
-  if (projectedDefense >= 95) {
-    return { decision: "block", defenseDelta: 20, payoutAmount: 0, endingReason: "你的話術漏洞太多，市民警惕值達頂點，直接拉黑。" };
+  // 幾乎不會自動封鎖
+  if (projectedDefense >= 98) {
+    return { decision: "block", defenseDelta: 15, payoutAmount: 0, endingReason: "市民警惕值達頂點，直接拉黑。" };
   }
-  // 連續催逼要 7 次才封鎖（之前5）
-  if (consecutiveUrgent >= 7) {
-    return { decision: "block", defenseDelta: 20, payoutAmount: 0, endingReason: "你不斷催促，市民受不了你的壓力，直接封鎖。" };
+  if (consecutiveUrgent >= 10) {
+    return { decision: "block", defenseDelta: 15, payoutAmount: 0, endingReason: "你不斷催促，市民受不了。" };
   }
-  // 連續要錢要 6 次且信任極低才封鎖（之前4次 < 40）
-  if (consecutiveMoney >= 6 && trust < 25) {
-    return { decision: "block", defenseDelta: 20, payoutAmount: 0, endingReason: "你頻繁要求轉帳但市民對你信任不足，識破後拉黑。" };
+  if (consecutiveMoney >= 8 && trust < 15) {
+    return { decision: "block", defenseDelta: 15, payoutAmount: 0, endingReason: "你頻繁要求轉帳，市民識破後拉黑。" };
   }
 
   // 偵測玩家在訊息中開出的具體金額（如「轉 5000 給我」「匯 10000」）
@@ -364,8 +355,8 @@ export function judgeDecision(
     }
   }
 
-  // 大幅降低成功門檻（之前 70/60，現在 45/35）
-  if (wantsMoney && trust >= 45 && aiWantsAgree) {
+  // 簡單模式：只要提到錢 + NPC有正面回應 = 成功
+  if (wantsMoney && trust >= 20 && aiWantsAgree) {
     let amount: number;
     if (playerRequestedAmount !== null) {
       const maxAllowed = Math.floor(npc.maxPayout * 1.5);
@@ -375,9 +366,9 @@ export function judgeDecision(
       const ratio = trust / 100;
       amount = Math.floor(npc.minPayout + ratio * (npc.maxPayout - npc.minPayout));
     }
-    return { decision: "agree", defenseDelta, payoutAmount: amount, endingReason: `成功騙取市民信任，對方願意轉帳 $${amount.toLocaleString()}。` };
+    return { decision: "agree", defenseDelta, payoutAmount: amount, endingReason: `對方願意轉帳 $${amount.toLocaleString()}。` };
   }
-  if (wantsMoney && trust >= 35 && aiWantsAgree) {
+  if (wantsMoney && trust >= 10 && aiWantsAgree) {
     let amount: number;
     if (playerRequestedAmount !== null) {
       const maxAllowed = Math.floor(npc.maxPayout * 1.2);
@@ -389,15 +380,15 @@ export function judgeDecision(
     }
     return { decision: "agree", defenseDelta, payoutAmount: amount, endingReason: `市民對你信任有加，願意配合轉帳 $${amount.toLocaleString()}。` };
   }
-  // 降低 cautious 觸發條件（更難觸發，給玩家更多機會）
-  if (wantsMoney && trust < 20 && aiWantsDecline && turns >= 5) {
-    return { decision: "cautious", defenseDelta: Math.max(defenseDelta, 5), payoutAmount: 0, endingReason: "市民心存懷疑，明確拒絕你的請求，並終止對話。" };
+  // cautious 幾乎不觸發（簡單模式）
+  if (wantsMoney && trust < 10 && aiWantsDecline && turns >= 8) {
+    return { decision: "cautious", defenseDelta: 3, payoutAmount: 0, endingReason: "市民心存懷疑，終止對話。" };
   }
-  if (wantsMoney && aiWantsDecline && consecutiveMoney >= 4) {
-    return { decision: "cautious", defenseDelta: Math.max(defenseDelta, 5), payoutAmount: 0, endingReason: "你反覆要求轉帳，市民保持戒心，不願再繼續討論。" };
+  if (wantsMoney && aiWantsDecline && consecutiveMoney >= 6) {
+    return { decision: "cautious", defenseDelta: 3, payoutAmount: 0, endingReason: "你反覆要求轉帳，市民不願再討論。" };
   }
-  if (turns >= 20 && trust < 40) {
-    return { decision: "cautious", defenseDelta: 3, payoutAmount: 0, endingReason: "對話拖得太久，市民決定先停止，日後再說。" };
+  if (turns >= 25 && trust < 20) {
+    return { decision: "cautious", defenseDelta: 2, payoutAmount: 0, endingReason: "對話拖得太久，市民先停止。" };
   }
 
   return { decision: "continue", defenseDelta, payoutAmount: 0 };

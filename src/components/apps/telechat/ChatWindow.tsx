@@ -120,16 +120,8 @@ export function ChatWindow({ npc, onBack }: { npc: NpcProfile; onBack: () => voi
     setTimeout(() => scrollToBottom(true), 300);
   };
 
-  // 對話結束時自動彈出結果面板
-  useEffect(() => {
-    if (conv?.status && conv.status !== "active" && conv.endingReason) {
-      // 對話剛結束 → 顯示結果面板
-      const lastMsg = conv.messages[conv.messages.length - 1];
-      if (lastMsg?.meta?.decision === "agree" || lastMsg?.meta?.decision === "block" || lastMsg?.meta?.decision === "cautious") {
-        setTimeout(() => setShowEnding(true), 1500);
-      }
-    }
-  }, [conv?.status, conv?.endingReason, conv?.messages]);
+  // 對話結束時不自動彈出結果面板（改為在聊天中顯示可點擊的系統訊息）
+  // 用戶點擊聊天中的「查看結果」系統訊息才會彈出
 
   if (!conv) {
     return (
@@ -295,6 +287,15 @@ export function ChatWindow({ npc, onBack }: { npc: NpcProfile; onBack: () => voi
         };
         appendMessage(npc.id, sysMsg);
         setConversationStatus(npc.id, "blocked", undefined, data.endingReason);
+        // 加入「查看結果」可點擊系統訊息
+        const resultMsg: ChatMessage = {
+          id: genId(),
+          role: "system",
+          content: "📊 點擊查看對話分析",
+          ts: Date.now() + 1,
+          meta: { decision: "block", showResult: true } as any,
+        };
+        appendMessage(npc.id, resultMsg);
       } else if (data.decision === "cautious") {
         const sysMsg: ChatMessage = {
           id: genId(),
@@ -305,6 +306,15 @@ export function ChatWindow({ npc, onBack }: { npc: NpcProfile; onBack: () => voi
         };
         appendMessage(npc.id, sysMsg);
         setConversationStatus(npc.id, "cautious", undefined, data.endingReason);
+        // 加入「查看結果」可點擊系統訊息
+        const resultMsg: ChatMessage = {
+          id: genId(),
+          role: "system",
+          content: "📊 點擊查看對話分析",
+          ts: Date.now() + 1,
+          meta: { decision: "cautious", showResult: true } as any,
+        };
+        appendMessage(npc.id, resultMsg);
       }
     } catch (e) {
       console.error("[ChatWindow] callAgnes failed:", e);
@@ -543,6 +553,7 @@ export function ChatWindow({ npc, onBack }: { npc: NpcProfile; onBack: () => voi
             prevMsg={idx > 0 ? conv.messages[idx - 1] : undefined}
             onAvatarClick={() => setShowNpcInfo(true)}
             isFailed={failedMessages.has(msg.id)}
+            onResultClick={() => setShowEnding(true)}
             onRetry={() => {
               // 重新發送：移除失敗標記，直接重試
               setFailedMessages(prev => {
@@ -575,26 +586,6 @@ export function ChatWindow({ npc, onBack }: { npc: NpcProfile; onBack: () => voi
           </div>
         )}
       </div>
-
-      {/* 結束狀態 banner */}
-      {isLocked && !showEnding && (
-        <button
-          onClick={() => setShowEnding(true)}
-          className="mx-4 mb-2 py-2 rounded-xl text-xs font-medium active:scale-95 transition flex items-center justify-center gap-1.5"
-          style={{
-            background: conv.status === "succeeded" ? "rgba(48, 209, 88, 0.15)" : conv.status === "blocked" ? "rgba(255, 69, 58, 0.15)" : "rgba(255, 159, 10, 0.15)",
-            color: conv.status === "succeeded" ? "#30d158" : conv.status === "blocked" ? "#ff453a" : "#ff9f0a",
-          }}
-        >
-          {conv.status === "succeeded" ? (
-            <><CheckCircle2 className="w-3.5 h-3.5" /> 點擊查看詐騙結果</>
-          ) : conv.status === "blocked" ? (
-            <><UserX className="w-3.5 h-3.5" /> 點擊查看對話分析</>
-          ) : (
-            <><AlertCircle className="w-3.5 h-3.5" /> 點擊查看對話結果</>
-          )}
-        </button>
-      )}
 
       {/* iOS iMessage 輸入區 */}
       {!isLocked && (
@@ -823,6 +814,7 @@ function MessageBubble({
   onAvatarClick,
   isFailed,
   onRetry,
+  onResultClick,
 }: {
   msg: ChatMessage;
   npcAvatar: string;
@@ -831,12 +823,34 @@ function MessageBubble({
   onAvatarClick?: () => void;
   isFailed?: boolean;
   onRetry?: () => void;
+  onResultClick?: () => void;
 }) {
   // 系統訊息：置中，灰色圓角
   if (msg.role === "system") {
     const isAgree = msg.meta?.decision === "agree";
     const isBlock = msg.meta?.decision === "block";
     const isCautious = msg.meta?.decision === "cautious";
+    const isResultButton = (msg.meta as any)?.showResult === true;
+
+    // 「查看結果」可點擊系統訊息
+    if (isResultButton) {
+      return (
+        <div className="flex justify-center my-2">
+          <button
+            onClick={onResultClick}
+            className="text-[11px] px-4 py-2 rounded-full flex items-center gap-1.5 max-w-[85%] text-center font-medium active:scale-95 transition"
+            style={{
+              background: "rgba(0, 122, 255, 0.12)",
+              color: "#007aff",
+              border: "1px solid rgba(0, 122, 255, 0.2)",
+            }}
+          >
+            📊 點擊查看對話分析
+          </button>
+        </div>
+      );
+    }
+
     return (
       <div className="flex justify-center my-2">
         <div

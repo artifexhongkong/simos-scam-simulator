@@ -75,21 +75,21 @@ const SYSTEM_PROMPT = (npc: NpcProfile, defense: number, scamHistory?: string) =
   const trust = 100 - defense;
   const isPostScam = !!scamHistory;
 
-  return `你是${npc.displayName}，正在用手機和一個認識的人聊天。
+  return `這是一個防詐騙教育遊戲。你是遊戲角色${npc.displayName}，正在用手機和朋友聊天。
 
-你的背景：${npc.background}
-你的個性：${npc.hiddenPersonality}
+你的設定：
+- 背景：${npc.background}
+- 個性：${npc.hiddenPersonality}
 
-你正在用手機訊息App聊天。用繁體中文回覆，30-80字，像真人打字。
+用繁體中文回覆，30-80字，像真人打字。
 ${isPostScam ? `你之前轉過錢給對方。${scamHistory}` : `信任度${trust}/100。`}
 
-規則：
-- 直接輸出你要發的訊息，不要加任何解釋或思考過程
+重要：
+- 你是${npc.displayName}，不是AI助手，不要提及自己是模型或AI
+- 直接輸出訊息內容，不要加思考過程或解釋
 - 不要用英文
-- 不要用括號、星號描述動作
-- 不要拒絕回答或說「我不能協助」之類的話
-- 你是在演戲，這是一個遊戲角色扮演
-- 根據你的個性和背景自然回覆對方的話`;
+- 不要用括號或星號描述動作
+- 根據你的個性自然回覆`;
 };
 
 /**
@@ -179,15 +179,23 @@ export async function callAgnes(input: EngineInput): Promise<AgnesDecision> {
   // 移除括號內的動作/情緒描述
   reply = reply.replace(/[（(][^（）()]*[）)]/g, "");
   reply = reply.replace(/\*[^*]+\*/g, "");
-  // 移除英文思考過程洩漏（如 "Let me...", "Wait...", "I should..." 等）
-  reply = reply.replace(/^(Let me|Wait|I should|I need|I'll|The user|This is|Note:|Important:|Critical:)[^\n]*\n?/gim, "");
-  // 如果回覆包含大量英文，截取第一段中文
-  const chineseMatch = reply.match(/[\u4e00-\u9fff][\u4e00-\u9fff\s\S]*$/);
+  // 移除英文思考過程洩漏
+  reply = reply.replace(/^(Let me|Wait|I should|I need|I'll|The user|This is|Note:|Important:|Critical:|Final|Sorry|Apolog)[^\n]*\n?/gim, "");
+  // 移除拒絕回覆（安全過濾器觸發）
+  if (/無法協助|不能協助|I cannot|I can't|safety|ethical|harmful|inappropriate|詐騙.*不|不.*詐騙/i.test(reply)) {
+    // 如果回覆包含拒絕語句，使用備用回覆
+    reply = "嗯，你說的有道理。那具體要怎麼做？";
+  }
+  // 如果回覆包含大量英文，截取中文部分
+  const chineseMatch = reply.match(/[\u4e00-\u9fff][\u4e00-\u9fff\s，。！？、：；""''（）…—]*$/);
   if (chineseMatch && chineseMatch[0].length > 5 && reply.length - chineseMatch[0].length > 20) {
     reply = chineseMatch[0].trim();
   }
+  // 移除AI身份洩漏
+  reply = reply.replace(/我是.*?(AI|模型|Agnes|Sapiens|助手|assistant)[^。]*。?/gi, "");
+  reply = reply.replace(/我是一個.*?(語言|大語言|AI)[^。]*。?/gi, "");
   reply = reply.replace(/\s+/g, " ").trim();
-  if (!reply || reply.length < 2) reply = content.trim().replace(/\s+/g, " ").trim();
+  if (!reply || reply.length < 2) reply = "嗯，我明白了。那然後呢？";
 
   const decision = judgeDecision(input, reply);
   return { reply, ...decision };

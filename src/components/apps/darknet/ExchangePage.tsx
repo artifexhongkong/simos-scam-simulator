@@ -116,16 +116,7 @@ export function ExchangePage({
         totalCost += actualCost;
         break;
       }
-      if (cost < seller.minAmount) {
-        // 嘗試湊到最低金額
-        const minCost = seller.minAmount;
-        const drcAtMin = Math.floor((minCost * seller.currentRate) / 100);
-        if (drcAtMin <= 0 || drcAtMin > seller.stock) continue;
-        transactions.push({ seller, drc: Math.min(drcAtMin, remainingDrc), cost: minCost });
-        remainingDrc -= Math.min(drcAtMin, remainingDrc);
-        totalCost += minCost;
-        continue;
-      }
+      if (cost < seller.minAmount) continue;
       transactions.push({ seller, drc: availableStock, cost });
       remainingDrc -= availableStock;
       totalCost += cost;
@@ -165,36 +156,28 @@ export function ExchangePage({
       if (remaining <= 0) break;
       const buy = Math.min(remaining, seller.stock);
       const cost = Math.ceil((buy / seller.currentRate) * 100);
-      if (cost < seller.minAmount) {
-        const minCost = seller.minAmount;
-        const drcAtMin = Math.floor((minCost * seller.currentRate) / 100);
-        if (drcAtMin <= 0) continue;
-        totalCost += minCost;
-        remaining -= Math.min(drcAtMin, remaining);
-      } else {
-        totalCost += cost;
-        remaining -= buy;
-      }
+      totalCost += cost;
+      remaining -= buy;
     }
     if (remaining > 0) return { cost: totalCost, insufficient: true, remaining };
     return { cost: totalCost, insufficient: false };
   }, [quickDrc, quickMinRate, sellers]);
 
-  // 單獨購買
+  // 單獨購買（移除最低金額限制）
   const handleSingleBuy = () => {
     if (!selectedSeller) return;
     const amount = parseInt(inputAmount.replace(/[^0-9]/g, ""), 10);
     if (isNaN(amount) || amount <= 0) return;
-    if (amount < selectedSeller.minAmount) {
-      flashResult(false, `最低金額 $${selectedSeller.minAmount.toLocaleString()}`);
-      return;
-    }
     if (amount > available) {
       flashResult(false, `可用金額不足（$${available.toLocaleString()}）`);
       return;
     }
 
     const maxDrc = Math.floor((amount * selectedSeller.currentRate) / 100);
+    if (maxDrc <= 0) {
+      flashResult(false, `金額太少，至少需要 $${Math.ceil(100 / selectedSeller.currentRate)}`);
+      return;
+    }
     if (maxDrc > selectedSeller.stock) {
       flashResult(false, `${selectedSeller.name} 庫存不足（剩 ${selectedSeller.stock} DRC）`);
       return;
@@ -291,7 +274,7 @@ export function ExchangePage({
       <div className="space-y-2 mb-4">
         {sellers.map((seller) => {
           const maxDrc = Math.floor((available * seller.currentRate) / 100);
-          const canBuy = available >= seller.minAmount && seller.stock > 0 && maxDrc > 0;
+          const canBuy = available > 0 && seller.stock > 0 && maxDrc > 0;
           const lowStock = seller.stock < 50;
           return (
             <button
@@ -322,7 +305,6 @@ export function ExchangePage({
                 <p className="text-[10px] mt-0.5" style={{ color: "#8e8e93" }}>{seller.desc}</p>
                 <div className="flex gap-3 mt-0.5">
                   <span className="text-[9px]" style={{ color: "#bf5af2" }}>庫存 {seller.stock} DRC</span>
-                  <span className="text-[9px]" style={{ color: "#48484a" }}>最低 ${seller.minAmount.toLocaleString()}</span>
                 </div>
               </div>
             </button>
@@ -388,7 +370,7 @@ export function ExchangePage({
 
               {/* 輸入金額 */}
               <p className="text-[11px] mb-2" style={{ color: "#8e8e93" }}>
-                輸入要兌換的金額（最低 ${selectedSeller.minAmount.toLocaleString()}）
+                輸入要兌換的金額
               </p>
               <div className="flex items-center gap-2 mb-3">
                 <span className="text-[14px]" style={{ color: "#8e8e93" }}>$</span>
@@ -396,7 +378,7 @@ export function ExchangePage({
                   type="text"
                   value={inputAmount}
                   onChange={(e) => setInputAmount(e.target.value.replace(/[^0-9]/g, ""))}
-                  placeholder={selectedSeller.minAmount.toString()}
+                  placeholder={available > 0 ? available.toLocaleString() : "0"}
                   autoFocus
                   className="flex-1 px-3 py-2.5 rounded-xl text-sm focus:outline-none"
                   style={{ background: "#2c2c2e", color: "#fff", border: "1px solid #3c3c3e" }}
@@ -408,7 +390,7 @@ export function ExchangePage({
                 <div className="rounded-xl p-2.5 mb-3" style={{ background: "#2c2c2e" }}>
                   <div className="flex justify-between text-[11px]">
                     <span style={{ color: "#8e8e93" }}>花費</span>
-                    <span style={{ color: "#34c759" }}>$${parseInt(inputAmount || "0").toLocaleString()}</span>
+                    <span style={{ color: "#34c759" }}>${parseInt(inputAmount || "0").toLocaleString()}</span>
                   </div>
                   <div className="flex justify-between text-[11px] mt-1">
                     <span style={{ color: "#8e8e93" }}>獲得</span>
@@ -420,7 +402,7 @@ export function ExchangePage({
               {/* 按鈕 */}
               <button
                 onClick={handleSingleBuy}
-                disabled={!inputAmount || parseInt(inputAmount) < selectedSeller.minAmount}
+                disabled={!inputAmount || parseInt(inputAmount) <= 0}
                 className="w-full py-3 rounded-xl text-sm font-bold active:scale-95 transition disabled:opacity-40"
                 style={{ background: "#34c759", color: "#fff" }}
               >

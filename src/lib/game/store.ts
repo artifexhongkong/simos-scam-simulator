@@ -304,7 +304,7 @@ export const useGameStore = create<GameState>()(
         // 匯率：每 $100 → rate DRC（預設 1.0）
         const actualRate = rate ?? 1.0;
         const drcGained = Math.floor(amount * actualRate / 100);
-        if (drcGained <= 0) return { ok: false, error: "金額太低，最少需 $100" };
+        if (drcGained <= 0) return { ok: false, error: "金額不足，無法兌換任何 DRC" };
         set({
           darkCoin: s.darkCoin + drcGained,
           convertedAmount: s.convertedAmount + amount,

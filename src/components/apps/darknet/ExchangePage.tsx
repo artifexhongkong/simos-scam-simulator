@@ -61,6 +61,7 @@ export function ExchangePage({
   const [selectedSeller, setSelectedSeller] = useState<ActiveSeller | null>(null);
   const [inputAmount, setInputAmount] = useState("");
   const [quickDrc, setQuickDrc] = useState(""); // 頂部快速購買 DRC 數量
+  const [quickMinRate, setQuickMinRate] = useState(""); // 最低匯率篩選
   const [resultMsg, setResultMsg] = useState<{ ok: boolean; msg: string } | null>(null);
 
   // 每次進入時生成新賣家列表（匯率 + 庫存隨機）
@@ -73,7 +74,7 @@ export function ExchangePage({
     setTimeout(() => setResultMsg(null), 4000);
   };
 
-  // 計算快速購買：按 DRC 數量自動找賣家
+  // 快速購買：按 DRC 數量 + 匯率下限自動找賣家
   const handleQuickBuy = () => {
     const targetDrc = parseInt(quickDrc, 10);
     if (isNaN(targetDrc) || targetDrc <= 0) {
@@ -81,12 +82,21 @@ export function ExchangePage({
       return;
     }
 
+    const minRate = parseFloat(quickMinRate) || 0;
+
     let remainingDrc = targetDrc;
     let totalCost = 0;
     const transactions: { seller: ActiveSeller; drc: number; cost: number }[] = [];
 
-    // 按匯率從高到低排序（先找匯率好的）
-    const sortedSellers = [...sellers].sort((a, b) => b.currentRate - a.currentRate);
+    // 按匯率從高到低排序（先找匯率好的），只選符合匯率下限的
+    const sortedSellers = [...sellers]
+      .filter((s) => s.currentRate >= minRate)
+      .sort((a, b) => b.currentRate - a.currentRate);
+
+    if (sortedSellers.length === 0) {
+      flashResult(false, `沒有匯率 ≥ ${minRate}x 的賣家`);
+      return;
+    }
 
     for (const seller of sortedSellers) {
       if (remainingDrc <= 0) break;
@@ -100,19 +110,29 @@ export function ExchangePage({
         const maxDrc = Math.floor((remainingMoney * seller.currentRate) / 100);
         if (maxDrc <= 0) continue;
         const actualCost = Math.ceil((maxDrc / seller.currentRate) * 100);
+        if (actualCost < seller.minAmount) continue;
         transactions.push({ seller, drc: maxDrc, cost: actualCost });
         remainingDrc -= maxDrc;
         totalCost += actualCost;
         break;
       }
-      if (cost < seller.minAmount) continue;
+      if (cost < seller.minAmount) {
+        // 嘗試湊到最低金額
+        const minCost = seller.minAmount;
+        const drcAtMin = Math.floor((minCost * seller.currentRate) / 100);
+        if (drcAtMin <= 0 || drcAtMin > seller.stock) continue;
+        transactions.push({ seller, drc: Math.min(drcAtMin, remainingDrc), cost: minCost });
+        remainingDrc -= Math.min(drcAtMin, remainingDrc);
+        totalCost += minCost;
+        continue;
+      }
       transactions.push({ seller, drc: availableStock, cost });
       remainingDrc -= availableStock;
       totalCost += cost;
     }
 
     if (remainingDrc > 0) {
-      flashResult(false, `市場庫存不足，無法購買 ${targetDrc} DRC`);
+      flashResult(false, `符合條件的賣家庫存不足，還差 ${remainingDrc} DRC`);
       return;
     }
 
@@ -132,6 +152,33 @@ export function ExchangePage({
     flashResult(true, `成功購買 ${totalDrcGained} DRC，花費 $${totalCost.toLocaleString()}（${transactions.length} 筆交易）`);
     setQuickDrc("");
   };
+
+  // 預估快速購買成本
+  const quickBuyEstimate = useMemo(() => {
+    const targetDrc = parseInt(quickDrc, 10);
+    if (isNaN(targetDrc) || targetDrc <= 0) return null;
+    const minRate = parseFloat(quickMinRate) || 0;
+    const eligible = [...sellers].filter((s) => s.currentRate >= minRate).sort((a, b) => b.currentRate - a.currentRate);
+    let remaining = targetDrc;
+    let totalCost = 0;
+    for (const seller of eligible) {
+      if (remaining <= 0) break;
+      const buy = Math.min(remaining, seller.stock);
+      const cost = Math.ceil((buy / seller.currentRate) * 100);
+      if (cost < seller.minAmount) {
+        const minCost = seller.minAmount;
+        const drcAtMin = Math.floor((minCost * seller.currentRate) / 100);
+        if (drcAtMin <= 0) continue;
+        totalCost += minCost;
+        remaining -= Math.min(drcAtMin, remaining);
+      } else {
+        totalCost += cost;
+        remaining -= buy;
+      }
+    }
+    if (remaining > 0) return { cost: totalCost, insufficient: true, remaining };
+    return { cost: totalCost, insufficient: false };
+  }, [quickDrc, quickMinRate, sellers]);
 
   // 單獨購買
   const handleSingleBuy = () => {
@@ -190,13 +237,21 @@ export function ExchangePage({
       {/* 快速購買 DRC */}
       <div className="rounded-2xl p-3 mb-3" style={{ background: "rgba(0,122,255,0.08)", border: "1px solid rgba(0,122,255,0.2)" }}>
         <p className="text-[10px] font-semibold mb-2" style={{ color: "#0a84ff" }}>⚡ 快速購買 DRC</p>
-        <div className="flex gap-2">
+        <div className="flex gap-2 mb-2">
           <input
             type="text"
             value={quickDrc}
             onChange={(e) => setQuickDrc(e.target.value.replace(/[^0-9]/g, ""))}
-            placeholder="輸入要購買的 DRC 數量"
+            placeholder="DRC 數量"
             className="flex-1 px-3 py-2 rounded-xl text-sm focus:outline-none"
+            style={{ background: "#2c2c2e", color: "#fff", border: "1px solid #3c3c3e" }}
+          />
+          <input
+            type="text"
+            value={quickMinRate}
+            onChange={(e) => setQuickMinRate(e.target.value.replace(/[^0-9.]/g, ""))}
+            placeholder="最低匯率"
+            className="w-[80px] px-3 py-2 rounded-xl text-sm focus:outline-none text-center"
             style={{ background: "#2c2c2e", color: "#fff", border: "1px solid #3c3c3e" }}
           />
           <button
@@ -208,8 +263,23 @@ export function ExchangePage({
             購買
           </button>
         </div>
-        <p className="text-[9px] mt-1.5" style={{ color: "#8e8e93" }}>
-          系統自動從匯率最優的賣家開始購買，庫存不足時自動找下一位
+        {/* 預估成本 */}
+        {quickBuyEstimate && (
+          <div className="rounded-xl p-2 mb-1" style={{ background: "rgba(0,122,255,0.1)" }}>
+            {quickBuyEstimate.insufficient ? (
+              <p className="text-[10px]" style={{ color: "#ff9500" }}>
+                ⚠ 預估 $${quickBuyEstimate.cost.toLocaleString()}，但賣家庫存不足（差 {quickBuyEstimate.remaining} DRC）
+              </p>
+            ) : (
+              <div className="flex justify-between text-[10px]">
+                <span style={{ color: "#8e8e93" }}>預估花費</span>
+                <span style={{ color: "#0a84ff" }}>$${quickBuyEstimate.cost.toLocaleString()}</span>
+              </div>
+            )}
+          </div>
+        )}
+        <p className="text-[9px]" style={{ color: "#8e8e93" }}>
+          輸入 DRC 數量 + 最低匯率，系統自動從最優賣家開始購買
         </p>
       </div>
 

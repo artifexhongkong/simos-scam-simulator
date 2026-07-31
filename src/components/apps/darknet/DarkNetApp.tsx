@@ -228,7 +228,7 @@ function HomePage({
     {
       id: "exchange",
       title: "暗網外匯",
-      desc: "將詐騙所得兌換為 DRC，多名賣家可選",
+      desc: "將資金兌換為 DRC，多名賣家即時報價",
       icon: <TrendingUp className="w-5 h-5" />,
       color: "#34c759",
       url: "darknet://exchange",

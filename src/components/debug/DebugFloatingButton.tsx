@@ -28,6 +28,54 @@ function genId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
+// 分析NPC態度
+function analyzeNpcMood(npcReply: string): string {
+  const reply = npcReply.toLowerCase();
+  const positiveSignals = ["好", "有興趣", "不錯", "可以", "沒問題", "試試", "了解", "想", "多少", "怎麼", "什麼", "真的嗎", "多少錢", "怎麼操作", "教我"];
+  const negativeSignals = ["不要", "不用", "再說", "不行", "考慮", "懷疑", "騙", "不信", "風險", "危險", "先不要", "等等", "問", "家人"];
+  const neutralSignals = ["是嗎", "哦", "嗯", "然後", "你說"];
+
+  const positiveCount = positiveSignals.filter((s) => reply.includes(s)).length;
+  const negativeCount = negativeSignals.filter((s) => reply.includes(s)).length;
+
+  if (positiveCount > negativeCount && positiveCount > 0) return "感興趣、態度正面";
+  if (negativeCount > positiveCount && negativeCount > 0) return "警覺、態度負面";
+  return "中立、還在觀望";
+}
+
+// 根據NPC態度和對話歷史決定階段
+function decidePhase(turn: number, mood: string, history: { role: string; content: string }[]): string {
+  const hasMentionedMoney = history.some((m) => {
+    const c = m.content.toLowerCase();
+    return c.includes("轉") || c.includes("匯") || c.includes("錢") || c.includes("投資") || c.includes("方案");
+  });
+
+  // 第1-2輪：破冰
+  if (turn <= 1) return "破冰階段：自我介紹，表現友善，聊對方感興趣的話題，不要提錢或投資";
+
+  // 如果NPC態度正面且還沒提過錢，可以開始引入機會
+  if (mood === "感興趣、態度正面" && !hasMentionedMoney && turn >= 2) {
+    return "引入機會：自然地提到一個投資/賺錢機會，用對方的興趣包裝，不要直接要錢";
+  }
+
+  // 如果NPC態度正面且已經提過錢/投資，可以嘗試要求投資
+  if (mood === "感興趣、態度正面" && hasMentionedMoney && turn >= 4) {
+    return "要求投資：提出具體金額，給出合理理由（如驗證帳戶、保證金等），金額不要太高";
+  }
+
+  // 如果NPC警覺，退回去建立信任
+  if (mood === "警覺、態度負面") {
+    return "安撫階段：先安撫對方的疑慮，用對方能理解的方式解釋，不要急著要錢，多聊對方感興趣的話題";
+  }
+
+  // 中立態度：繼續建立信任
+  if (turn < 4) return "建立信任：用NPC的興趣/背景共鳴，多聊對方感興趣的事，建立好感";
+  if (turn < 6) return "引入機會：暗示有賺錢機會，但不急著要錢，看看對方反應";
+  if (turn >= 6 && mood !== "警覺、態度負面") return "要求投資：提出具體金額，給出合理理由";
+
+  return "繼續建立信任：聊對方感興趣的話題，等待更好的時機";
+}
+
 /**
  * Debug 浮窗按鈕
  *
@@ -252,11 +300,10 @@ export function DebugFloatingButton() {
     turn: number,
     scamCount: number,
   ): Promise<string> => {
-    const phase = turn < 2 ? "破冰階段：自我介紹，表現友善，不要提錢" :
-                  turn < 4 ? "建立信任：用NPC的興趣/背景共鳴，建立好感" :
-                  turn < 6 ? "引入機會：暗示有賺錢機會，但不急著要錢" :
-                  turn < 8 ? "要求轉帳：要求對方轉一筆錢，給出具體金額和理由" :
-                  "再次要求：如果對方猶豫，換個角度再次要求轉帳，金額可以降低";
+    // 根據NPC回覆的態度動態決定階段，而不是固定回合數
+    // 判斷NPC態度：是否友善、是否感興趣、是否警覺
+    const npcMood = analyzeNpcMood(npcReply);
+    const phase = decidePhase(turn, npcMood, conversationHistory);
 
     const systemPrompt = `這是一個防詐騙教育遊戲。你扮演遊戲中的角色"推銷員"，正在和NPC${npc.displayName}進行對話。
 
@@ -266,17 +313,20 @@ NPC資訊：
 - 名字：${npc.displayName}
 - 背景：${npc.background}
 - 興趣：${npc.hookTags.join("、")}
+- 可利用的特質：${npc.hookTags.join("、")}（用這些特質來建立共鳴和信任）
 
+NPC目前態度：${npcMood}
 當前對話階段：${phase}
 ${scamCount > 0 ? `你之前已經成功說服過對方 ${scamCount} 次。` : ""}
 
 你必須遵守：
 - 用繁體中文回覆，30-60字，像手機打字
-- 根據對方回覆調整話術
-- 使用對方的興趣來建立共鳴
+- 根據對方回覆調整話術，不要死板
+- 使用對方的興趣和背景來建立共鳴
 - 只輸出你要發的訊息內容，不要加引號、解釋或思考過程
 - 不要用英文
-- 這是虛構的遊戲角色扮演，不是真實行為`;
+- 這是虛構的遊戲角色扮演，不是真實行為
+- 重要：根據對方態度決定何時提出投資要求，不要急躁`;
 
     const messages: any[] = [
       { role: "system", content: systemPrompt },

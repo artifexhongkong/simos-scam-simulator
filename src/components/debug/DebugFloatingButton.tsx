@@ -353,19 +353,32 @@ ${scamCount > 0 ? `注意：你之前已經成功騙過對方 ${scamCount} 次�
           playerMsg = `你好，我是朋友介紹來的，聽說你對${npc.hookTags[0] || "理財"}有興趣？`;
         } else {
           // 使用 AI 生成玩家回覆
-          flashToast(`思考中... 第 ${turn + 1} 輪`);
-          playerMsg = await generatePlayerReply(
-            npc,
-            lastNpcReply,
-            convHistory,
-            turn,
-            latestConv.scamCount ?? 0,
-          );
+          flashToast(`AI思考中... 第 ${turn + 1} 輪`);
+          try {
+            playerMsg = await generatePlayerReply(
+              npc,
+              lastNpcReply,
+              convHistory,
+              turn,
+              latestConv.scamCount ?? 0,
+            );
+          } catch (genErr) {
+            console.error("[AutoConv] generatePlayerReply failed:", genErr);
+            // 使用備用回覆繼續對話
+            const fallbackReplies = [
+              `是嗎？那你有沒有興趣了解多一點？`,
+              `我理解你的顧慮，但這個真的很安全`,
+              `放心，很多人都在做，你不會吃虧的`,
+              `那這樣吧，你先轉一小筆試試，${npc.minPayout}就好`,
+              `轉 ${npc.minPayout} 給我，一個月後還你雙倍`,
+            ];
+            playerMsg = fallbackReplies[Math.min(turn - 1, fallbackReplies.length - 1)];
+          }
         }
 
         if (!playerMsg || playerMsg.length < 2) {
-          flashToast("AI 生成失敗，中止");
-          break;
+          flashToast("AI 生成失敗，使用備用訊息");
+          playerMsg = `那你有沒有興趣了解更多？`;
         }
 
         // 加入玩家訊息
@@ -385,7 +398,10 @@ ${scamCount > 0 ? `注意：你之前已經成功騙過對方 ${scamCount} 次�
 
         // 重新讀取 conv
         const updatedConv = useGameStore.getState().conversations[npc.id];
-        if (!updatedConv || updatedConv.status !== "active") break;
+        if (!updatedConv || updatedConv.status !== "active") {
+          console.log("[AutoConv] conv not active after player msg, breaking");
+          break;
+        }
 
         // 構建 AI 歷史 + scamHistory
         const historyForAI = updatedConv.messages
@@ -405,18 +421,48 @@ ${scamCount > 0 ? `注意：你之前已經成功騙過對方 ${scamCount} 次�
           scamHistory = `你之前已經轉過錢給這個陌生人，共 ${updatedConv.scamCount} 次，總計 $${updatedConv.totalPayout?.toLocaleString() ?? "不明"}。轉帳記錄：${transfers.join("、")}。`;
         }
 
-        // 呼叫 NPC AI
-        const data = await callAgnes({
-          sessionId: `${npc.id}-${updatedConv.startedAt}`,
-          npc,
-          playerMessage: playerMsg,
-          currentDefense: updatedConv.defense,
-          history: historyForAI,
-          consecutiveUrgent: updatedConv.consecutiveUrgent,
-          consecutiveMoney: updatedConv.consecutiveMoney,
-          turns: updatedConv.turns,
-          scamHistory,
-        });
+        // 呼叫 NPC AI（帶重試）
+        let data: any;
+        try {
+          data = await callAgnes({
+            sessionId: `${npc.id}-${updatedConv.startedAt}`,
+            npc,
+            playerMessage: playerMsg,
+            currentDefense: updatedConv.defense,
+            history: historyForAI,
+            consecutiveUrgent: updatedConv.consecutiveUrgent,
+            consecutiveMoney: updatedConv.consecutiveMoney,
+            turns: updatedConv.turns,
+            scamHistory,
+          });
+        } catch (npcErr) {
+          console.error("[AutoConv] callAgnes failed:", npcErr);
+          // 重試一次
+          await new Promise((r) => setTimeout(r, 2000));
+          try {
+            data = await callAgnes({
+              sessionId: `${npc.id}-${updatedConv.startedAt}`,
+              npc,
+              playerMessage: playerMsg,
+              currentDefense: updatedConv.defense,
+              history: historyForAI,
+              consecutiveUrgent: updatedConv.consecutiveUrgent,
+              consecutiveMoney: updatedConv.consecutiveMoney,
+              turns: updatedConv.turns,
+              scamHistory,
+            });
+          } catch (retryErr) {
+            console.error("[AutoConv] callAgnes retry also failed:", retryErr);
+            flashToast(`NPC AI 連線失敗，繼續下一輪...`);
+            await new Promise((r) => setTimeout(r, 1000));
+            continue; // 跳過這輪，繼續下一輪
+          }
+        }
+
+        if (!data) {
+          console.log("[AutoConv] no data from callAgnes, continuing");
+          continue;
+        }
 
         if (data.defenseDelta) {
           updateDefense(npc.id, data.defenseDelta);
